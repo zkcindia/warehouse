@@ -13,6 +13,7 @@ import {
   Smartphone,
   Wallet,
   Boxes,
+  CircleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,8 +38,8 @@ export default function AddParcelModal({ open, onClose, onCreated }) {
   const [submittedBy, setSubmittedBy] = useState("");
   const [photo, setPhoto] = useState(null); // data URL
   const [products, setProducts] = useState([{ name: "", quantity: "" }]);
-  const [paymentMade, setPaymentMade] = useState(false);
-  const [paymentMode, setPaymentMode] = useState("upi");
+  // payment_mode: 'upi' | 'card' | 'cash' | 'none'
+  const [paymentMode, setPaymentMode] = useState("none");
 
   if (!open) return null;
 
@@ -48,8 +49,7 @@ export default function AddParcelModal({ open, onClose, onCreated }) {
     setSubmittedBy("");
     setPhoto(null);
     setProducts([{ name: "", quantity: "" }]);
-    setPaymentMade(false);
-    setPaymentMode("upi");
+    setPaymentMode("none");
   };
 
   const close = () => {
@@ -95,14 +95,15 @@ export default function AddParcelModal({ open, onClose, onCreated }) {
 
     setSubmitting(true);
     try {
+      const isPaid = paymentMode !== "none";
       const payload = {
         company_name: companyName.trim() || null,
         num_packages: Number(numPackages),
         carton_photo: photo || null,
         products: cleanProducts,
         submitted_by: submittedBy.trim() || null,
-        payment_made: paymentMade,
-        payment_mode: paymentMade ? paymentMode : null,
+        payment_made: isPaid,
+        payment_mode: isPaid ? paymentMode : null,
       };
       const res = await axios.post(`${API}/parcels`, payload, { headers: authHeaders() });
       toast.success(`Stock invoice ${res.data.parcel_number} created`);
@@ -280,62 +281,40 @@ export default function AddParcelModal({ open, onClose, onCreated }) {
             <p className="text-[11px] text-neutral-400 mt-1">Name of the person who handed over / submitted this stock.</p>
           </div>
 
-          {/* Payment */}
+          {/* Payment mode */}
           <div className="bg-neutral-50 border border-neutral-100 rounded-xl p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-medium text-neutral-800">Submit by payment mode?</div>
-                <div className="text-xs text-neutral-500">Was the parcel paid for at the time of submission?</div>
-              </div>
-              <div className="inline-flex bg-white border border-neutral-200 rounded-lg p-0.5">
-                <button
-                  type="button"
-                  data-testid="payment-no"
-                  onClick={() => setPaymentMade(false)}
-                  className={`px-3 py-1.5 text-xs rounded-md ${
-                    !paymentMade ? "bg-neutral-900 text-white" : "text-neutral-600"
-                  }`}
-                >
-                  No
-                </button>
-                <button
-                  type="button"
-                  data-testid="payment-yes"
-                  onClick={() => setPaymentMade(true)}
-                  className={`px-3 py-1.5 text-xs rounded-md ${
-                    paymentMade ? "bg-neutral-900 text-white" : "text-neutral-600"
-                  }`}
-                >
-                  Yes
-                </button>
-              </div>
+            <div className="mb-3">
+              <div className="text-sm font-medium text-neutral-800">Payment mode</div>
+              <div className="text-xs text-neutral-500">Select how this stock was paid for. Choose <span className="font-medium">Unpaid</span> if no payment has been made yet.</div>
             </div>
-            {paymentMade && (
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {[
-                  { key: "upi", label: "UPI", Icon: Smartphone },
-                  { key: "card", label: "Card", Icon: CreditCard },
-                  { key: "cash", label: "Cash", Icon: Wallet },
-                ].map((m) => {
-                  const active = paymentMode === m.key;
-                  return (
-                    <button
-                      key={m.key}
-                      type="button"
-                      data-testid={`payment-mode-${m.key}`}
-                      onClick={() => setPaymentMode(m.key)}
-                      className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
-                        active
-                          ? "border-neutral-900 bg-white text-neutral-900"
-                          : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300"
-                      }`}
-                    >
-                      <m.Icon className="w-4 h-4" /> {m.label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { key: "upi", label: "UPI", Icon: Smartphone },
+                { key: "card", label: "Card", Icon: CreditCard },
+                { key: "cash", label: "Cash", Icon: Wallet },
+                { key: "none", label: "Unpaid", Icon: CircleAlert },
+              ].map((m) => {
+                const active = paymentMode === m.key;
+                const isNone = m.key === "none";
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    data-testid={`payment-mode-${m.key}`}
+                    onClick={() => setPaymentMode(m.key)}
+                    className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                      active
+                        ? isNone
+                          ? "border-amber-300 bg-amber-50 text-amber-800"
+                          : "border-neutral-900 bg-white text-neutral-900"
+                        : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300"
+                    }`}
+                  >
+                    <m.Icon className="w-4 h-4" /> {m.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </form>
 
