@@ -96,6 +96,18 @@ class ParcelCreate(BaseModel):
     payment_made: bool = False
     payment_mode: Optional[Literal['upi', 'card', 'cash']] = None
 
+class BatchParcelEntry(BaseModel):
+    company_name: Optional[str] = Field(default=None, max_length=120)
+    num_packages: int = Field(ge=1, le=100000)
+    carton_photo: Optional[str] = None
+    products: List[ProductIn] = Field(min_length=1)
+    payment_made: bool = False
+    payment_mode: Optional[Literal['upi', 'card', 'cash']] = None
+
+class BatchParcelCreate(BaseModel):
+    submitted_by: Optional[str] = Field(default=None, max_length=80)
+    entries: List[BatchParcelEntry] = Field(min_length=1, max_length=50)
+
 class ParcelOut(BaseModel):
     id: str
     parcel_number: str
@@ -350,6 +362,46 @@ async def create_parcel(body: ParcelCreate, user: dict = Depends(require_role(RO
     }
     await db.parcels.insert_one(doc)
     return parcel_doc_to_out(doc)
+
+@api_router.post("/parcels/batch", status_code=201)
+async def create_parcels_batch(body: BatchParcelCreate, user: dict = Depends(require_role(ROLE_WAREHOUSE))):
+    # Validate each entry's payment combo
+    for idx, e in enumerate(body.entries):
+        if e.payment_made and not e.payment_mode:
+            raise HTTPException(status_code=400, detail=f"Entry {idx + 1}: payment mode is required when payment is made.")
+        if not e.payment_made:
+            e.payment_mode = None
+        if e.carton_photo and len(e.carton_photo) > 6_000_000:
+            raise HTTPException(status_code=400, detail=f"Entry {idx + 1}: carton photo is too large (max ~4MB).")
+
+    submitted_by = (body.submitted_by.strip() if body.submitted_by else None) or None
+    now = datetime.now(timezone.utc)
+    created = []
+    for e in body.entries:
+        parcel_number = await _next_parcel_number()
+        products = [{
+            'id': str(uuid.uuid4()),
+            'name': p.name.strip(),
+            'quantity': int(p.quantity),
+            'created_at': now.isoformat(),
+        } for p in e.products]
+        doc = {
+            'id': str(uuid.uuid4()),
+            'parcel_number': parcel_number,
+            'company_name': (e.company_name.strip() if e.company_name else None) or None,
+            'num_packages': int(e.num_packages),
+            'carton_photo': e.carton_photo,
+            'products': products,
+            'submitted_by': submitted_by,
+            'payment_made': bool(e.payment_made),
+            'payment_mode': e.payment_mode,
+            'created_at': now.isoformat(),
+            'created_by': user['id'],
+            'created_by_name': user['full_name'],
+        }
+        await db.parcels.insert_one(doc)
+        created.append(parcel_doc_to_out(doc))
+    return {"created": created, "count": len(created)}
 
 @api_router.get("/parcels", response_model=List[ParcelOut])
 async def list_parcels(user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE))):
