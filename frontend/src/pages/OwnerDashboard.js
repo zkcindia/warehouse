@@ -269,6 +269,12 @@ export default function OwnerDashboard() {
                         <Boxes className="w-3.5 h-3.5" /> {p.products.length} products ·{" "}
                         {p.total_quantity} units
                       </span>
+                      {p.submitted_by && (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="text-neutral-400">By</span>
+                          <span className="font-medium text-neutral-700">{p.submitted_by}</span>
+                        </span>
+                      )}
                       <span className="inline-flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5" />{" "}
                         {new Date(p.created_at).toLocaleString()}

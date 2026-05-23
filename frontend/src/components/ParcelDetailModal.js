@@ -59,6 +59,7 @@ export default function ParcelDetailModal({ parcel, onClose }) {
               label="Received at"
               value={new Date(parcel.created_at).toLocaleString()}
             />
+            <InfoTile icon={User} label="Submitted by" value={parcel.submitted_by || "—"} />
             <InfoTile icon={User} label="Logged by" value={parcel.created_by_name} />
             <InfoTile
               icon={parcel.payment_made ? CircleCheck : CircleAlert}

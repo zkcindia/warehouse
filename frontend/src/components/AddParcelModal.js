@@ -34,6 +34,7 @@ export default function AddParcelModal({ open, onClose, onCreated }) {
 
   const [companyName, setCompanyName] = useState("");
   const [numPackages, setNumPackages] = useState("");
+  const [submittedBy, setSubmittedBy] = useState("");
   const [photo, setPhoto] = useState(null); // data URL
   const [products, setProducts] = useState([{ name: "", quantity: "" }]);
   const [paymentMade, setPaymentMade] = useState(false);
@@ -44,6 +45,7 @@ export default function AddParcelModal({ open, onClose, onCreated }) {
   const reset = () => {
     setCompanyName("");
     setNumPackages("");
+    setSubmittedBy("");
     setPhoto(null);
     setProducts([{ name: "", quantity: "" }]);
     setPaymentMade(false);
@@ -98,6 +100,7 @@ export default function AddParcelModal({ open, onClose, onCreated }) {
         num_packages: Number(numPackages),
         carton_photo: photo || null,
         products: cleanProducts,
+        submitted_by: submittedBy.trim() || null,
         payment_made: paymentMade,
         payment_mode: paymentMade ? paymentMode : null,
       };
@@ -262,6 +265,19 @@ export default function AddParcelModal({ open, onClose, onCreated }) {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Submitted by */}
+          <div>
+            <label className="text-xs font-medium text-neutral-600">Submitted by <span className="text-neutral-400 font-normal">(optional)</span></label>
+            <input
+              data-testid="parcel-submitted-by"
+              value={submittedBy}
+              onChange={(e) => setSubmittedBy(e.target.value)}
+              placeholder="e.g. Biswajit"
+              className="mt-1 w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
+            />
+            <p className="text-[11px] text-neutral-400 mt-1">Name of the person who handed over / submitted this stock.</p>
           </div>
 
           {/* Payment */}

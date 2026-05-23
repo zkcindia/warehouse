@@ -91,6 +91,7 @@ class ParcelCreate(BaseModel):
     num_packages: int = Field(ge=1, le=100000)
     carton_photo: Optional[str] = None  # data:image/...;base64,...
     products: List[ProductIn] = Field(min_length=1)
+    submitted_by: Optional[str] = Field(default=None, max_length=80)
     payment_made: bool = False
     payment_mode: Optional[Literal['upi', 'card', 'cash']] = None
 
@@ -101,6 +102,7 @@ class ParcelOut(BaseModel):
     num_packages: int
     carton_photo: Optional[str] = None
     products: List[ProductOut]
+    submitted_by: Optional[str] = None
     payment_made: bool
     payment_mode: Optional[str] = None
     total_quantity: int
@@ -293,6 +295,7 @@ def parcel_doc_to_out(doc: dict) -> dict:
         'num_packages': doc['num_packages'],
         'carton_photo': doc.get('carton_photo'),
         'products': products,
+        'submitted_by': doc.get('submitted_by'),
         'payment_made': doc.get('payment_made', False),
         'payment_mode': doc.get('payment_mode'),
         'total_quantity': total_qty,
@@ -331,6 +334,7 @@ async def create_parcel(body: ParcelCreate, owner: dict = Depends(require_role(R
         'num_packages': int(body.num_packages),
         'carton_photo': body.carton_photo,
         'products': products,
+        'submitted_by': (body.submitted_by.strip() if body.submitted_by else None) or None,
         'payment_made': bool(body.payment_made),
         'payment_mode': body.payment_mode,
         'created_at': now.isoformat(),
