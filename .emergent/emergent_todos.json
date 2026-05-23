@@ -1,0 +1,22 @@
+[
+  {
+    "content": "Phase 2: Build backend - auth (JWT, bcrypt), owner seed, staff CRUD endpoints",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: Build frontend - role selection landing, login form, dashboards, owner staff mgmt",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: Install dependencies (PyJWT, bcrypt; react-router-dom, sonner)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: All user stories covered and verified manually",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: End to End Testing using Testing Agent",
+    "status": "in_progress"
+  }
+]
