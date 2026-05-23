@@ -148,11 +148,25 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {role.key === "owner" && (
+            {role.demoEmail && (
               <div className="mt-5 text-xs text-neutral-500 bg-neutral-50 border border-neutral-100 rounded-lg p-3">
-                <div className="font-medium text-neutral-700 mb-0.5">Default Owner credentials</div>
-                Email: <span className="font-mono">owner@warehouse.com</span><br />
-                Password: <span className="font-mono">Owner@123</span>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="font-medium text-neutral-700">Demo credentials</div>
+                  <button
+                    type="button"
+                    data-testid="autofill-demo"
+                    onClick={() => {
+                      setEmail(role.demoEmail);
+                      setPassword(role.demoPassword);
+                      setError("");
+                    }}
+                    className="text-[11px] font-medium text-neutral-700 hover:text-neutral-900 underline underline-offset-2"
+                  >
+                    Use demo
+                  </button>
+                </div>
+                Email: <span className="font-mono">{role.demoEmail}</span><br />
+                Password: <span className="font-mono">{role.demoPassword}</span>
               </div>
             )}
           </div>

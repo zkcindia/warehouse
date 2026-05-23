@@ -148,25 +148,30 @@ async def on_startup():
     except Exception as e:
         logger.warning(f"Index creation warning: {e}")
 
-    # Seed default owner
-    owner_email = os.environ.get('DEFAULT_OWNER_EMAIL', 'owner@warehouse.com')
-    owner_password = os.environ.get('DEFAULT_OWNER_PASSWORD', 'Owner@123')
-    existing = await db.users.find_one({'role': ROLE_OWNER})
-    if not existing:
-        owner_doc = {
-            'id': str(uuid.uuid4()),
-            'email': owner_email,
-            'password_hash': hash_password(owner_password),
-            'full_name': 'System Owner',
-            'role': ROLE_OWNER,
-            'created_at': datetime.now(timezone.utc).isoformat(),
-            'created_by': 'system',
-        }
-        try:
-            await db.users.insert_one(owner_doc)
-            logger.info(f"Seeded default owner: {owner_email}")
-        except Exception as e:
-            logger.warning(f"Owner seed skipped: {e}")
+    # Seed demo accounts for ALL roles
+    demo_accounts = [
+        {'email': 'owner@warehouse.com',        'password': 'Owner@123',       'full_name': 'Demo Owner',             'role': ROLE_OWNER},
+        {'email': 'warehouse@warehouse.com',    'password': 'Warehouse@123',   'full_name': 'Demo Warehouse Staff',   'role': ROLE_WAREHOUSE},
+        {'email': 'dataentry@warehouse.com',    'password': 'DataEntry@123',   'full_name': 'Demo Data Entry Staff',  'role': ROLE_DATA_ENTRY},
+        {'email': 'verification@warehouse.com', 'password': 'Verify@123',      'full_name': 'Demo Verification Staff','role': ROLE_VERIFICATION},
+    ]
+    for acc in demo_accounts:
+        existing = await db.users.find_one({'email': acc['email']})
+        if not existing:
+            doc = {
+                'id': str(uuid.uuid4()),
+                'email': acc['email'],
+                'password_hash': hash_password(acc['password']),
+                'full_name': acc['full_name'],
+                'role': acc['role'],
+                'created_at': datetime.now(timezone.utc).isoformat(),
+                'created_by': 'system',
+            }
+            try:
+                await db.users.insert_one(doc)
+                logger.info(f"Seeded demo {acc['role']}: {acc['email']}")
+            except Exception as e:
+                logger.warning(f"Seed skipped for {acc['email']}: {e}")
 
 # =========================
 # Routes

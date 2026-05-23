@@ -5,9 +5,11 @@ export const ROLES = [
     key: "owner",
     slug: "owner",
     label: "Owner",
-    description: "Full control. Manage staff and oversee operations.",
+    description: "Full control. Oversee operations and inventory.",
     icon: Crown,
     accent: "bg-neutral-900 text-white",
+    demoEmail: "owner@warehouse.com",
+    demoPassword: "Owner@123",
   },
   {
     key: "warehouse",
@@ -16,6 +18,8 @@ export const ROLES = [
     description: "Receive and handle products in the warehouse.",
     icon: Warehouse,
     accent: "bg-blue-600 text-white",
+    demoEmail: "warehouse@warehouse.com",
+    demoPassword: "Warehouse@123",
   },
   {
     key: "data_entry",
@@ -24,6 +28,8 @@ export const ROLES = [
     description: "Record incoming product information into the system.",
     icon: ClipboardEdit,
     accent: "bg-emerald-600 text-white",
+    demoEmail: "dataentry@warehouse.com",
+    demoPassword: "DataEntry@123",
   },
   {
     key: "verification",
@@ -32,6 +38,8 @@ export const ROLES = [
     description: "Verify product details and approve entries.",
     icon: ShieldCheck,
     accent: "bg-amber-600 text-white",
+    demoEmail: "verification@warehouse.com",
+    demoPassword: "Verify@123",
   },
 ];
 
