@@ -21,6 +21,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
+import EditInvoiceModal from "@/components/EditInvoiceModal";
 
 const MAX_IMG_BYTES = 4 * 1024 * 1024; // 4MB
 
@@ -484,7 +485,8 @@ export default function WarehouseDashboard() {
 // SubmittedDetailsPanel — shown after submit, with edit/delete
 // ============================================================
 function SubmittedDetailsPanel({ batch, setBatch, api, authHeaders, onAddMore }) {
-  const [editing, setEditing] = useState(null); // { parcelId, productId, name, quantity }
+  const [editing, setEditing] = useState(null); // product edit state
+  const [invoiceEditing, setInvoiceEditing] = useState(null); // invoice modal state
 
   const totals = batch.reduce(
     (acc, p) => ({
@@ -641,6 +643,15 @@ function SubmittedDetailsPanel({ batch, setBatch, api, authHeaders, onAddMore })
             </div>
             <button
               type="button"
+              data-testid={`edit-invoice-${parcel.parcel_number}`}
+              onClick={() => setInvoiceEditing(parcel)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50 hover:border-neutral-300 transition-colors"
+              title="Edit all invoice details"
+            >
+              <Pencil className="w-3.5 h-3.5" /> Edit invoice
+            </button>
+            <button
+              type="button"
               data-testid={`delete-invoice-${parcel.parcel_number}`}
               onClick={() => handleDeleteParcel(parcel)}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors"
@@ -767,6 +778,14 @@ function SubmittedDetailsPanel({ batch, setBatch, api, authHeaders, onAddMore })
           <Plus className="w-4 h-4" /> Add new stock
         </button>
       </div>
+
+      <EditInvoiceModal
+        parcel={invoiceEditing}
+        onClose={() => setInvoiceEditing(null)}
+        onSaved={(updated) => {
+          setBatch((arr) => arr.map((p) => (p.id === updated.id ? updated : p)));
+        }}
+      />
     </div>
   );
 }

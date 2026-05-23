@@ -456,6 +456,72 @@ class ProductPatch(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=120)
     quantity: Optional[int] = Field(default=None, ge=1, le=1_000_000)
 
+class ParcelPatch(BaseModel):
+    company_name: Optional[str] = Field(default=None, max_length=120)
+    num_packages: Optional[int] = Field(default=None, ge=1, le=100000)
+    carton_photo: Optional[str] = None  # can be base64 or '' to clear
+    submitted_by: Optional[str] = Field(default=None, max_length=80)
+    payment_made: Optional[bool] = None
+    payment_mode: Optional[Literal['upi', 'card', 'cash']] = None
+    products: Optional[List[ProductIn]] = None  # full replace if provided
+
+@api_router.patch("/parcels/{parcel_id}", response_model=ParcelOut)
+async def patch_parcel(parcel_id: str, body: ParcelPatch, user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE))):
+    parcel = await db.parcels.find_one({'id': parcel_id}, {'_id': 0})
+    if not parcel:
+        raise HTTPException(status_code=404, detail="Parcel not found.")
+
+    update = {}
+    if body.company_name is not None:
+        update['company_name'] = body.company_name.strip() or None
+    if body.num_packages is not None:
+        update['num_packages'] = int(body.num_packages)
+    if body.carton_photo is not None:
+        if body.carton_photo == '':
+            update['carton_photo'] = None
+        else:
+            if len(body.carton_photo) > 6_000_000:
+                raise HTTPException(status_code=400, detail="Carton photo is too large (max ~4MB).")
+            update['carton_photo'] = body.carton_photo
+    if body.submitted_by is not None:
+        update['submitted_by'] = body.submitted_by.strip() or None
+    if body.payment_made is not None:
+        update['payment_made'] = bool(body.payment_made)
+        if not body.payment_made:
+            update['payment_mode'] = None
+        else:
+            # if turning on payment, require a mode (either provided or already on doc)
+            mode = body.payment_mode if body.payment_mode is not None else parcel.get('payment_mode')
+            if not mode:
+                raise HTTPException(status_code=400, detail="Payment mode is required when payment is made.")
+            update['payment_mode'] = mode
+    elif body.payment_mode is not None:
+        # payment_made not provided but mode is — keep current paid state but update mode
+        if not parcel.get('payment_made'):
+            raise HTTPException(status_code=400, detail="Cannot set payment mode while invoice is unpaid.")
+        update['payment_mode'] = body.payment_mode
+    if body.products is not None:
+        if len(body.products) < 1:
+            raise HTTPException(status_code=400, detail="At least one product is required.")
+        # Preserve existing IDs/created_at where possible by index
+        existing = parcel.get('products', [])
+        new_products = []
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for i, p in enumerate(body.products):
+            base = existing[i] if i < len(existing) else None
+            new_products.append({
+                'id': base['id'] if base else str(uuid.uuid4()),
+                'name': p.name.strip(),
+                'quantity': int(p.quantity),
+                'created_at': base['created_at'] if base else now_iso,
+            })
+        update['products'] = new_products
+
+    if update:
+        await db.parcels.update_one({'id': parcel_id}, {'$set': update})
+    updated = await db.parcels.find_one({'id': parcel_id}, {'_id': 0})
+    return parcel_doc_to_out(updated)
+
 @api_router.patch("/parcels/{parcel_id}/products/{product_id}", response_model=ParcelOut)
 async def update_product(parcel_id: str, product_id: str, body: ProductPatch, user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE))):
     parcel = await db.parcels.find_one({'id': parcel_id}, {'_id': 0})
