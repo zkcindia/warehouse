@@ -485,8 +485,7 @@ export default function WarehouseDashboard() {
 // SubmittedDetailsPanel — shown after submit, with edit/delete
 // ============================================================
 function SubmittedDetailsPanel({ batch, setBatch, api, authHeaders, onAddMore }) {
-  const [editing, setEditing] = useState(null); // product edit state
-  const [invoiceEditing, setInvoiceEditing] = useState(null); // invoice modal state
+  const [invoiceEditing, setInvoiceEditing] = useState(null);
 
   const totals = batch.reduce(
     (acc, p) => ({
@@ -497,28 +496,13 @@ function SubmittedDetailsPanel({ batch, setBatch, api, authHeaders, onAddMore })
     { packages: 0, units: 0, products: 0 }
   );
 
+  // Flatten all products across all invoices into a single list of rows
+  const rows = batch.flatMap((parcel) =>
+    (parcel.products || []).map((prod) => ({ parcel, prod }))
+  );
+
   const refreshParcel = (updated) => {
     setBatch((arr) => arr.map((p) => (p.id === updated.id ? updated : p)));
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editing) return;
-    const name = (editing.name || "").trim();
-    const qty = Number(editing.quantity);
-    if (!name) return toast.error("Product name is required.");
-    if (!qty || qty < 1) return toast.error("Quantity must be at least 1.");
-    try {
-      const res = await axios.patch(
-        `${api}/parcels/${editing.parcelId}/products/${editing.productId}`,
-        { name, quantity: qty },
-        { headers: authHeaders() }
-      );
-      refreshParcel(res.data);
-      setEditing(null);
-      toast.success("Product updated");
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || "Failed to update product");
-    }
   };
 
   const handleDeleteProduct = async (parcel, product) => {
@@ -533,23 +517,11 @@ function SubmittedDetailsPanel({ batch, setBatch, api, authHeaders, onAddMore })
     } catch (err) {
       const status = err?.response?.status;
       if (status === 410) {
-        // parcel deleted because no products left
         setBatch((arr) => arr.filter((p) => p.id !== parcel.id));
         toast.success(`${parcel.parcel_number} removed (no products left)`);
       } else {
         toast.error(err?.response?.data?.detail || "Failed to delete product");
       }
-    }
-  };
-
-  const handleDeleteParcel = async (parcel) => {
-    if (!window.confirm(`Delete entire invoice ${parcel.parcel_number}? This cannot be undone.`)) return;
-    try {
-      await axios.delete(`${api}/parcels/${parcel.id}`, { headers: authHeaders() });
-      setBatch((arr) => arr.filter((p) => p.id !== parcel.id));
-      toast.success(`${parcel.parcel_number} deleted`);
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || "Failed to delete invoice");
     }
   };
 
@@ -592,182 +564,140 @@ function SubmittedDetailsPanel({ batch, setBatch, api, authHeaders, onAddMore })
         </button>
       </div>
 
-      {/* Each parcel detail card */}
-      {batch.map((parcel) => (
-        <div
-          key={parcel.id}
-          data-testid={`submitted-${parcel.parcel_number}`}
-          className="bg-white border border-neutral-200 rounded-2xl overflow-hidden"
-        >
-          {/* Parcel header */}
-          <div className="px-5 py-3 border-b border-neutral-100 bg-neutral-50/60 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              {parcel.carton_photo ? (
-                <img
-                  src={parcel.carton_photo}
-                  alt={parcel.parcel_number}
-                  className="w-10 h-10 rounded-lg object-cover border border-neutral-200"
-                />
-              ) : (
-                <div className="w-10 h-10 rounded-lg bg-neutral-100 border border-neutral-200 flex items-center justify-center text-neutral-400">
-                  <ImageIcon className="w-4 h-4" />
-                </div>
-              )}
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold text-neutral-900 truncate">
-                    {parcel.company_name || (
-                      <span className="text-neutral-400 italic font-normal">No company</span>
-                    )}
-                  </span>
-                  <PaymentBadge paid={parcel.payment_made} mode={parcel.payment_mode} />
-                </div>
-                <div className="text-[11px] text-neutral-500 mt-0.5 flex items-center gap-2 flex-wrap">
-                  <span className="font-mono">{parcel.parcel_number}</span>
-                  <span>·</span>
-                  <span>{parcel.num_packages} packages</span>
-                  <span>·</span>
-                  <span>
-                    {parcel.products.length} products · {parcel.total_quantity} units
-                  </span>
-                  {parcel.submitted_by && (
-                    <>
-                      <span>·</span>
-                      <span>
-                        By <span className="font-medium text-neutral-700">{parcel.submitted_by}</span>
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-            <button
-              type="button"
-              data-testid={`edit-invoice-${parcel.parcel_number}`}
-              onClick={() => setInvoiceEditing(parcel)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50 hover:border-neutral-300 transition-colors"
-              title="Edit all invoice details"
-            >
-              <Pencil className="w-3.5 h-3.5" /> Edit invoice
-            </button>
-            <button
-              type="button"
-              data-testid={`delete-invoice-${parcel.parcel_number}`}
-              onClick={() => handleDeleteParcel(parcel)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors"
-              title="Delete this invoice"
-            >
-              <Trash2 className="w-3.5 h-3.5" /> Delete invoice
-            </button>
-          </div>
-
-          {/* Products list */}
+      {/* Flat product table */}
+      <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-white text-neutral-400">
-              <tr className="text-[11px] uppercase tracking-wider">
-                <th className="text-left px-5 py-2 font-medium w-12">#</th>
-                <th className="text-left px-3 py-2 font-medium">Product</th>
-                <th className="text-right px-3 py-2 font-medium w-24">Qty</th>
-                <th className="text-right px-5 py-2 font-medium w-44">Actions</th>
+            <thead>
+              <tr className="bg-neutral-50 text-neutral-500 text-[11px] uppercase tracking-wider">
+                <th className="text-left px-5 py-3 font-medium">Product</th>
+                <th className="text-left px-3 py-3 font-medium">Invoice</th>
+                <th className="text-left px-3 py-3 font-medium">Company</th>
+                <th className="text-center px-3 py-3 font-medium">Packages</th>
+                <th className="text-right px-3 py-3 font-medium">Qty</th>
+                <th className="text-left px-3 py-3 font-medium">Submitted by</th>
+                <th className="text-center px-3 py-3 font-medium">Status</th>
+                <th className="text-center px-5 py-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
-              {parcel.products.map((prod, i) => {
-                const isEditing =
-                  editing &&
-                  editing.parcelId === parcel.id &&
-                  editing.productId === prod.id;
-                return (
-                  <tr key={prod.id} className="hover:bg-neutral-50">
-                    <td className="px-5 py-2.5 text-neutral-400 text-xs">{i + 1}</td>
-                    <td className="px-3 py-2.5">
-                      {isEditing ? (
-                        <input
-                          data-testid={`edit-name-${prod.id}`}
-                          value={editing.name}
-                          onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                          className="w-full px-2 py-1 rounded-md border border-neutral-300 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                          autoFocus
+              {rows.map(({ parcel, prod }) => (
+                <tr
+                  key={`${parcel.id}-${prod.id}`}
+                  data-testid={`product-row-${prod.id}`}
+                  className="hover:bg-neutral-50 transition-colors"
+                >
+                  {/* Product (image + name + id) */}
+                  <td className="px-5 py-4">
+                    <div className="flex items-center gap-3">
+                      {parcel.carton_photo ? (
+                        <img
+                          src={parcel.carton_photo}
+                          alt=""
+                          className="w-12 h-12 rounded-lg object-cover border border-neutral-200 shrink-0"
                         />
                       ) : (
-                        <div>
-                          <div className="text-neutral-900 font-medium">{prod.name}</div>
-                          <div className="text-[10px] text-neutral-400 font-mono">
-                            {prod.id.slice(0, 8)}…
-                          </div>
+                        <div className="w-12 h-12 rounded-lg bg-neutral-100 border border-neutral-200 flex items-center justify-center text-[10px] text-neutral-400 shrink-0">
+                          No Image
                         </div>
                       )}
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      {isEditing ? (
-                        <input
-                          data-testid={`edit-qty-${prod.id}`}
-                          type="number"
-                          min="1"
-                          value={editing.quantity}
-                          onChange={(e) =>
-                            setEditing({ ...editing, quantity: e.target.value })
-                          }
-                          className="w-20 px-2 py-1 rounded-md border border-neutral-300 text-sm text-right focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                        />
-                      ) : (
-                        <span className="text-neutral-800 font-medium">{prod.quantity}</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-2.5 text-right">
-                      {isEditing ? (
-                        <div className="inline-flex gap-1.5">
-                          <button
-                            type="button"
-                            data-testid={`save-edit-${prod.id}`}
-                            onClick={handleSaveEdit}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-neutral-900 text-white text-xs hover:bg-neutral-800"
-                          >
-                            <CircleCheck className="w-3.5 h-3.5" /> Save
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditing(null)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-neutral-200 text-xs text-neutral-600 hover:bg-neutral-50"
-                          >
-                            <X className="w-3.5 h-3.5" /> Cancel
-                          </button>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-neutral-900 truncate">
+                          {prod.name}
                         </div>
-                      ) : (
-                        <div className="inline-flex gap-1.5">
-                          <button
-                            type="button"
-                            data-testid={`edit-product-${prod.id}`}
-                            onClick={() =>
-                              setEditing({
-                                parcelId: parcel.id,
-                                productId: prod.id,
-                                name: prod.name,
-                                quantity: String(prod.quantity),
-                              })
-                            }
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50"
-                          >
-                            <Pencil className="w-3.5 h-3.5" /> Edit
-                          </button>
-                          <button
-                            type="button"
-                            data-testid={`delete-product-${prod.id}`}
-                            onClick={() => handleDeleteProduct(parcel, prod)}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-neutral-200 text-xs text-neutral-700 hover:bg-red-50 hover:border-red-200 hover:text-red-600"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" /> Delete
-                          </button>
+                        <div className="text-[11px] text-neutral-400 font-mono">
+                          ID: {prod.id.slice(0, 12)}…
                         </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Invoice number as a soft pill */}
+                  <td className="px-3 py-4">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 text-[11px] font-mono">
+                      {parcel.parcel_number}
+                    </span>
+                  </td>
+
+                  {/* Company */}
+                  <td className="px-3 py-4">
+                    {parcel.company_name ? (
+                      <span className="text-sm text-neutral-700 truncate">
+                        {parcel.company_name}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-neutral-400 italic">—</span>
+                    )}
+                  </td>
+
+                  {/* Packages */}
+                  <td className="px-3 py-4 text-center">
+                    <span className="inline-flex items-center justify-center min-w-[28px] h-6 px-2 rounded-full bg-neutral-100 text-neutral-700 text-xs font-medium">
+                      {parcel.num_packages}
+                    </span>
+                  </td>
+
+                  {/* Qty - emphasized in green */}
+                  <td className="px-3 py-4 text-right">
+                    <span className="text-sm font-bold text-emerald-700">{prod.quantity}</span>
+                  </td>
+
+                  {/* Submitted by */}
+                  <td className="px-3 py-4">
+                    {parcel.submitted_by ? (
+                      <span className="text-sm text-neutral-700">{parcel.submitted_by}</span>
+                    ) : (
+                      <span className="text-sm text-neutral-400">—</span>
+                    )}
+                  </td>
+
+                  {/* Status pill (Paid/Unpaid) */}
+                  <td className="px-3 py-4 text-center">
+                    {parcel.payment_made ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold">
+                        <CircleCheck className="w-3 h-3" />
+                        {parcel.payment_mode === "upi"
+                          ? "Paid · UPI"
+                          : parcel.payment_mode === "card"
+                          ? "Paid · Card"
+                          : "Paid · Cash"}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold">
+                        <CircleAlert className="w-3 h-3" /> Unpaid
+                      </span>
+                    )}
+                  </td>
+
+                  {/* Actions - pencil + red trash */}
+                  <td className="px-5 py-4">
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        data-testid={`row-edit-${prod.id}`}
+                        onClick={() => setInvoiceEditing(parcel)}
+                        title="Edit invoice"
+                        className="w-8 h-8 rounded-md flex items-center justify-center text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 transition-colors"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`row-delete-${prod.id}`}
+                        onClick={() => handleDeleteProduct(parcel, prod)}
+                        title="Delete product"
+                        className="w-8 h-8 rounded-md flex items-center justify-center text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-      ))}
+      </div>
 
       <div className="flex justify-center">
         <button
