@@ -18,6 +18,7 @@ import {
   X,
   RefreshCw,
   Building2,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -372,38 +373,18 @@ export default function WarehouseDashboard() {
           </div>
         </div>
 
-        {/* Last batch confirmation */}
+        {/* Last batch detailed view */}
         {lastBatch && lastBatch.length > 0 && (
-          <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-2xl p-4 fade-in">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                <CircleCheck className="w-5 h-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-emerald-900">
-                  {lastBatch.length} invoice{lastBatch.length > 1 ? "s" : ""} saved
-                </div>
-                <ul className="mt-1.5 space-y-0.5 text-xs text-emerald-900/80">
-                  {lastBatch.map((p) => (
-                    <li key={p.id} className="truncate">
-                      <span className="font-mono">{p.parcel_number}</span> ·{" "}
-                      {p.products.map((pr) => `${pr.name} (${pr.quantity})`).join(", ")} ·{" "}
-                      {p.num_packages} pkgs{p.company_name ? ` · ${p.company_name}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <button
-                onClick={() => setLastBatch(null)}
-                className="p-1.5 rounded-md text-emerald-700 hover:bg-emerald-100"
-                aria-label="Dismiss"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
+          <SubmittedDetailsPanel
+            batch={lastBatch}
+            setBatch={setLastBatch}
+            api={API}
+            authHeaders={authHeaders}
+            onAddMore={() => setLastBatch(null)}
+          />
         )}
 
+        {!lastBatch && (
         <form onSubmit={submit} className="space-y-4">
           {/* Live totals chip */}
           <div className="flex items-center gap-2 flex-wrap text-xs">
@@ -493,7 +474,317 @@ export default function WarehouseDashboard() {
             </div>
           </div>
         </form>
+        )}
       </div>
     </DashboardShell>
+  );
+}
+
+// ============================================================
+// SubmittedDetailsPanel — shown after submit, with edit/delete
+// ============================================================
+function SubmittedDetailsPanel({ batch, setBatch, api, authHeaders, onAddMore }) {
+  const [editing, setEditing] = useState(null); // { parcelId, productId, name, quantity }
+
+  const totals = batch.reduce(
+    (acc, p) => ({
+      packages: acc.packages + (p.num_packages || 0),
+      units: acc.units + (p.total_quantity || 0),
+      products: acc.products + (p.products?.length || 0),
+    }),
+    { packages: 0, units: 0, products: 0 }
+  );
+
+  const refreshParcel = (updated) => {
+    setBatch((arr) => arr.map((p) => (p.id === updated.id ? updated : p)));
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editing) return;
+    const name = (editing.name || "").trim();
+    const qty = Number(editing.quantity);
+    if (!name) return toast.error("Product name is required.");
+    if (!qty || qty < 1) return toast.error("Quantity must be at least 1.");
+    try {
+      const res = await axios.patch(
+        `${api}/parcels/${editing.parcelId}/products/${editing.productId}`,
+        { name, quantity: qty },
+        { headers: authHeaders() }
+      );
+      refreshParcel(res.data);
+      setEditing(null);
+      toast.success("Product updated");
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Failed to update product");
+    }
+  };
+
+  const handleDeleteProduct = async (parcel, product) => {
+    if (!window.confirm(`Delete product "${product.name}"?`)) return;
+    try {
+      const res = await axios.delete(
+        `${api}/parcels/${parcel.id}/products/${product.id}`,
+        { headers: authHeaders() }
+      );
+      refreshParcel(res.data);
+      toast.success("Product removed");
+    } catch (err) {
+      const status = err?.response?.status;
+      if (status === 410) {
+        // parcel deleted because no products left
+        setBatch((arr) => arr.filter((p) => p.id !== parcel.id));
+        toast.success(`${parcel.parcel_number} removed (no products left)`);
+      } else {
+        toast.error(err?.response?.data?.detail || "Failed to delete product");
+      }
+    }
+  };
+
+  const handleDeleteParcel = async (parcel) => {
+    if (!window.confirm(`Delete entire invoice ${parcel.parcel_number}? This cannot be undone.`)) return;
+    try {
+      await axios.delete(`${api}/parcels/${parcel.id}`, { headers: authHeaders() });
+      setBatch((arr) => arr.filter((p) => p.id !== parcel.id));
+      toast.success(`${parcel.parcel_number} deleted`);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Failed to delete invoice");
+    }
+  };
+
+  if (batch.length === 0) {
+    return (
+      <div className="bg-white border border-neutral-200 rounded-2xl p-8 text-center">
+        <div className="text-sm text-neutral-500 mb-3">All submitted invoices were removed.</div>
+        <button
+          onClick={onAddMore}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800"
+        >
+          <Plus className="w-4 h-4" /> Add new stock
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 fade-in">
+      {/* Summary banner */}
+      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+          <CircleCheck className="w-5 h-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-emerald-900">
+            {batch.length} invoice{batch.length > 1 ? "s" : ""} saved
+          </div>
+          <div className="text-xs text-emerald-900/70 mt-0.5">
+            {totals.products} products · {totals.units} units · {totals.packages} packages — review,
+            edit or delete before moving on.
+          </div>
+        </div>
+        <button
+          onClick={onAddMore}
+          data-testid="add-more-stock"
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800"
+        >
+          <Plus className="w-4 h-4" /> Add new stock
+        </button>
+      </div>
+
+      {/* Each parcel detail card */}
+      {batch.map((parcel) => (
+        <div
+          key={parcel.id}
+          data-testid={`submitted-${parcel.parcel_number}`}
+          className="bg-white border border-neutral-200 rounded-2xl overflow-hidden"
+        >
+          {/* Parcel header */}
+          <div className="px-5 py-3 border-b border-neutral-100 bg-neutral-50/60 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              {parcel.carton_photo ? (
+                <img
+                  src={parcel.carton_photo}
+                  alt={parcel.parcel_number}
+                  className="w-10 h-10 rounded-lg object-cover border border-neutral-200"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-lg bg-neutral-100 border border-neutral-200 flex items-center justify-center text-neutral-400">
+                  <ImageIcon className="w-4 h-4" />
+                </div>
+              )}
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-semibold text-neutral-900 truncate">
+                    {parcel.company_name || (
+                      <span className="text-neutral-400 italic font-normal">No company</span>
+                    )}
+                  </span>
+                  <PaymentBadge paid={parcel.payment_made} mode={parcel.payment_mode} />
+                </div>
+                <div className="text-[11px] text-neutral-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                  <span className="font-mono">{parcel.parcel_number}</span>
+                  <span>·</span>
+                  <span>{parcel.num_packages} packages</span>
+                  <span>·</span>
+                  <span>
+                    {parcel.products.length} products · {parcel.total_quantity} units
+                  </span>
+                  {parcel.submitted_by && (
+                    <>
+                      <span>·</span>
+                      <span>
+                        By <span className="font-medium text-neutral-700">{parcel.submitted_by}</span>
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              data-testid={`delete-invoice-${parcel.parcel_number}`}
+              onClick={() => handleDeleteParcel(parcel)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors"
+              title="Delete this invoice"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete invoice
+            </button>
+          </div>
+
+          {/* Products list */}
+          <table className="w-full text-sm">
+            <thead className="bg-white text-neutral-400">
+              <tr className="text-[11px] uppercase tracking-wider">
+                <th className="text-left px-5 py-2 font-medium w-12">#</th>
+                <th className="text-left px-3 py-2 font-medium">Product</th>
+                <th className="text-right px-3 py-2 font-medium w-24">Qty</th>
+                <th className="text-right px-5 py-2 font-medium w-44">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100">
+              {parcel.products.map((prod, i) => {
+                const isEditing =
+                  editing &&
+                  editing.parcelId === parcel.id &&
+                  editing.productId === prod.id;
+                return (
+                  <tr key={prod.id} className="hover:bg-neutral-50">
+                    <td className="px-5 py-2.5 text-neutral-400 text-xs">{i + 1}</td>
+                    <td className="px-3 py-2.5">
+                      {isEditing ? (
+                        <input
+                          data-testid={`edit-name-${prod.id}`}
+                          value={editing.name}
+                          onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                          className="w-full px-2 py-1 rounded-md border border-neutral-300 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                          autoFocus
+                        />
+                      ) : (
+                        <div>
+                          <div className="text-neutral-900 font-medium">{prod.name}</div>
+                          <div className="text-[10px] text-neutral-400 font-mono">
+                            {prod.id.slice(0, 8)}…
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      {isEditing ? (
+                        <input
+                          data-testid={`edit-qty-${prod.id}`}
+                          type="number"
+                          min="1"
+                          value={editing.quantity}
+                          onChange={(e) =>
+                            setEditing({ ...editing, quantity: e.target.value })
+                          }
+                          className="w-20 px-2 py-1 rounded-md border border-neutral-300 text-sm text-right focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                        />
+                      ) : (
+                        <span className="text-neutral-800 font-medium">{prod.quantity}</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-2.5 text-right">
+                      {isEditing ? (
+                        <div className="inline-flex gap-1.5">
+                          <button
+                            type="button"
+                            data-testid={`save-edit-${prod.id}`}
+                            onClick={handleSaveEdit}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-neutral-900 text-white text-xs hover:bg-neutral-800"
+                          >
+                            <CircleCheck className="w-3.5 h-3.5" /> Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditing(null)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-neutral-200 text-xs text-neutral-600 hover:bg-neutral-50"
+                          >
+                            <X className="w-3.5 h-3.5" /> Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="inline-flex gap-1.5">
+                          <button
+                            type="button"
+                            data-testid={`edit-product-${prod.id}`}
+                            onClick={() =>
+                              setEditing({
+                                parcelId: parcel.id,
+                                productId: prod.id,
+                                name: prod.name,
+                                quantity: String(prod.quantity),
+                              })
+                            }
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50"
+                          >
+                            <Pencil className="w-3.5 h-3.5" /> Edit
+                          </button>
+                          <button
+                            type="button"
+                            data-testid={`delete-product-${prod.id}`}
+                            onClick={() => handleDeleteProduct(parcel, prod)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-neutral-200 text-xs text-neutral-700 hover:bg-red-50 hover:border-red-200 hover:text-red-600"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Delete
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ))}
+
+      <div className="flex justify-center">
+        <button
+          type="button"
+          onClick={onAddMore}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-neutral-200 bg-white text-sm text-neutral-700 hover:bg-neutral-50"
+        >
+          <Plus className="w-4 h-4" /> Add new stock
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PaymentBadge({ paid, mode }) {
+  if (!paid) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+        <CircleAlert className="w-3 h-3" /> Unpaid
+      </span>
+    );
+  }
+  const Icon =
+    mode === "upi" ? Smartphone : mode === "card" ? CreditCard : Wallet;
+  const label = mode === "upi" ? "UPI" : mode === "card" ? "Card" : "Cash";
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+      <CircleCheck className="w-3 h-3" /> Paid · <Icon className="w-3 h-3" /> {label}
+    </span>
   );
 }

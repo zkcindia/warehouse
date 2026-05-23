@@ -451,6 +451,44 @@ async def parcels_summary(user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAR
         'total_units': units,
     }
 
+# --- Product-level edits inside a parcel ---
+class ProductPatch(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    quantity: Optional[int] = Field(default=None, ge=1, le=1_000_000)
+
+@api_router.patch("/parcels/{parcel_id}/products/{product_id}", response_model=ParcelOut)
+async def update_product(parcel_id: str, product_id: str, body: ProductPatch, user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE))):
+    parcel = await db.parcels.find_one({'id': parcel_id}, {'_id': 0})
+    if not parcel:
+        raise HTTPException(status_code=404, detail="Parcel not found.")
+    products = parcel.get('products', [])
+    idx = next((i for i, p in enumerate(products) if p['id'] == product_id), -1)
+    if idx == -1:
+        raise HTTPException(status_code=404, detail="Product not found in this parcel.")
+    if body.name is not None:
+        products[idx]['name'] = body.name.strip()
+    if body.quantity is not None:
+        products[idx]['quantity'] = int(body.quantity)
+    await db.parcels.update_one({'id': parcel_id}, {'$set': {'products': products}})
+    updated = await db.parcels.find_one({'id': parcel_id}, {'_id': 0})
+    return parcel_doc_to_out(updated)
+
+@api_router.delete("/parcels/{parcel_id}/products/{product_id}", response_model=ParcelOut)
+async def delete_product(parcel_id: str, product_id: str, user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE))):
+    parcel = await db.parcels.find_one({'id': parcel_id}, {'_id': 0})
+    if not parcel:
+        raise HTTPException(status_code=404, detail="Parcel not found.")
+    products = [p for p in parcel.get('products', []) if p['id'] != product_id]
+    if len(products) == len(parcel.get('products', [])):
+        raise HTTPException(status_code=404, detail="Product not found in this parcel.")
+    if not products:
+        # If no products left, delete the parcel itself
+        await db.parcels.delete_one({'id': parcel_id})
+        raise HTTPException(status_code=410, detail="Last product removed; parcel deleted.")
+    await db.parcels.update_one({'id': parcel_id}, {'$set': {'products': products}})
+    updated = await db.parcels.find_one({'id': parcel_id}, {'_id': 0})
+    return parcel_doc_to_out(updated)
+
 # Include the router in the main app
 app.include_router(api_router)
 
