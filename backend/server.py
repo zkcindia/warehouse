@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 import os
 import logging
 from pathlib import Path
@@ -304,9 +305,15 @@ def parcel_doc_to_out(doc: dict) -> dict:
     }
 
 async def _next_parcel_number() -> str:
-    # Count-based sequence, padded to 4 digits, with PCL- prefix
-    count = await db.parcels.count_documents({})
-    return f"PCL-{count + 1:04d}"
+    # Atomic counter to avoid duplicates after deletes
+    res = await db.counters.find_one_and_update(
+        {'_id': 'parcel_number'},
+        {'$inc': {'value': 1}},
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
+    val = (res or {}).get('value') or 1
+    return f"PCL-{val:04d}"
 
 @api_router.post("/parcels", response_model=ParcelOut, status_code=201)
 async def create_parcel(body: ParcelCreate, owner: dict = Depends(require_role(ROLE_OWNER))):

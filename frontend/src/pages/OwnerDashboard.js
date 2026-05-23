@@ -19,6 +19,7 @@ import {
   Image as ImageIcon,
   CircleCheck,
   CircleAlert,
+  Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -251,32 +252,48 @@ export default function OwnerDashboard() {
                     onClick={() => setDetailParcel(p)}
                     className="flex-1 min-w-0 text-left"
                   >
+                    {/* Products as headline */}
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold text-neutral-900">
-                        {p.parcel_number}
-                      </span>
-                      <span className="text-neutral-300">·</span>
-                      <span className="text-sm text-neutral-700 truncate">
-                        {p.company_name || <span className="text-neutral-400 italic">No company</span>}
+                      <span
+                        className="text-sm font-semibold text-neutral-900 truncate"
+                        title={p.products.map((pr) => `${pr.name} (${pr.quantity})`).join(", ")}
+                      >
+                        {p.products.slice(0, 3).map((pr) => pr.name).join(", ")}
+                        {p.products.length > 3 && (
+                          <span className="text-neutral-400 font-normal">
+                            {" "}+{p.products.length - 3} more
+                          </span>
+                        )}
                       </span>
                       <PaymentBadge paid={p.payment_made} mode={p.payment_mode} />
                     </div>
-                    <div className="mt-1 text-xs text-neutral-500 flex items-center gap-3 flex-wrap">
+                    {/* Secondary: company + counts */}
+                    <div className="mt-1 text-xs text-neutral-600 flex items-center gap-3 flex-wrap">
                       <span className="inline-flex items-center gap-1">
+                        <Building2 className="w-3.5 h-3.5 text-neutral-400" />
+                        <span className="font-medium text-neutral-700">
+                          {p.company_name || <span className="text-neutral-400 italic font-normal">No company</span>}
+                        </span>
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-neutral-500">
+                        <Boxes className="w-3.5 h-3.5" /> {p.total_quantity} units · {p.products.length} {p.products.length === 1 ? "product" : "products"}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-neutral-500">
                         <Package className="w-3.5 h-3.5" /> {p.num_packages} packages
                       </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Boxes className="w-3.5 h-3.5" /> {p.products.length} products ·{" "}
-                        {p.total_quantity} units
-                      </span>
                       {p.submitted_by && (
-                        <span className="inline-flex items-center gap-1">
+                        <span className="inline-flex items-center gap-1 text-neutral-500">
                           <span className="text-neutral-400">By</span>
                           <span className="font-medium text-neutral-700">{p.submitted_by}</span>
                         </span>
                       )}
+                    </div>
+                    {/* Footer: small parcel id + datetime */}
+                    <div className="mt-1.5 flex items-center gap-2 text-[11px] text-neutral-400">
+                      <span className="font-mono">{p.parcel_number}</span>
+                      <span>·</span>
                       <span className="inline-flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5" />{" "}
+                        <Calendar className="w-3 h-3" />
                         {new Date(p.created_at).toLocaleString()}
                       </span>
                     </div>
