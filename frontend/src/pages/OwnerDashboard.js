@@ -96,7 +96,7 @@ export default function OwnerDashboard() {
   };
 
   const handleDelete = async (parcel) => {
-    if (!window.confirm(`Delete parcel ${parcel.parcel_number}? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete invoice ${parcel.parcel_number}? This cannot be undone.`)) return;
     setDeletingId(parcel.id);
     try {
       await axios.delete(`${API}/parcels/${parcel.id}`, { headers: authHeaders() });
@@ -140,7 +140,7 @@ export default function OwnerDashboard() {
             >
               Welcome, {user?.full_name}
             </div>
-            <div className="text-sm text-neutral-500">Manage incoming parcels and products.</div>
+            <div className="text-sm text-neutral-500">Manage incoming stock invoices and products.</div>
           </div>
         </div>
         <button
@@ -148,7 +148,7 @@ export default function OwnerDashboard() {
           onClick={() => setAddOpen(true)}
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800 transition-colors"
         >
-          <Plus className="w-4 h-4" /> New parcel
+          <Plus className="w-4 h-4" /> New stock invoice
         </button>
       </div>
 
@@ -156,7 +156,7 @@ export default function OwnerDashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
           icon={Truck}
-          label="Total parcels"
+          label="Total invoices"
           value={stats?.total_parcels ?? "—"}
           accent="bg-neutral-900 text-white"
         />
@@ -184,7 +184,7 @@ export default function OwnerDashboard() {
       <section className="bg-white border border-neutral-200 rounded-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-100">
           <div>
-            <h2 className="text-base font-semibold text-neutral-900">Incoming parcels</h2>
+            <h2 className="text-base font-semibold text-neutral-900">Stock invoices</h2>
             <p className="text-xs text-neutral-500">Newest first</p>
           </div>
           <div className="relative">
@@ -209,11 +209,11 @@ export default function OwnerDashboard() {
               <Boxes className="w-6 h-6" />
             </div>
             <div className="mt-3 text-sm font-medium text-neutral-700">
-              {parcels.length === 0 ? "No parcels yet" : "No matching parcels"}
+              {parcels.length === 0 ? "No stock invoices yet" : "No matching invoices"}
             </div>
             <p className="text-xs text-neutral-500 mt-1">
               {parcels.length === 0
-                ? "Click “New parcel” to log incoming products from a company."
+                ? "Click “New stock invoice” to log incoming products."
                 : "Try a different search keyword."}
             </p>
           </div>
@@ -256,7 +256,9 @@ export default function OwnerDashboard() {
                         {p.parcel_number}
                       </span>
                       <span className="text-neutral-300">·</span>
-                      <span className="text-sm text-neutral-700 truncate">{p.company_name}</span>
+                      <span className="text-sm text-neutral-700 truncate">
+                        {p.company_name || <span className="text-neutral-400 italic">No company</span>}
+                      </span>
                       <PaymentBadge paid={p.payment_made} mode={p.payment_mode} />
                     </div>
                     <div className="mt-1 text-xs text-neutral-500 flex items-center gap-3 flex-wrap">

@@ -87,7 +87,7 @@ class ProductOut(BaseModel):
     created_at: datetime
 
 class ParcelCreate(BaseModel):
-    company_name: str = Field(min_length=1, max_length=120)
+    company_name: Optional[str] = Field(default=None, max_length=120)
     num_packages: int = Field(ge=1, le=100000)
     carton_photo: Optional[str] = None  # data:image/...;base64,...
     products: List[ProductIn] = Field(min_length=1)
@@ -97,7 +97,7 @@ class ParcelCreate(BaseModel):
 class ParcelOut(BaseModel):
     id: str
     parcel_number: str
-    company_name: str
+    company_name: Optional[str] = None
     num_packages: int
     carton_photo: Optional[str] = None
     products: List[ProductOut]
@@ -289,7 +289,7 @@ def parcel_doc_to_out(doc: dict) -> dict:
     return {
         'id': doc['id'],
         'parcel_number': doc['parcel_number'],
-        'company_name': doc['company_name'],
+        'company_name': doc.get('company_name'),
         'num_packages': doc['num_packages'],
         'carton_photo': doc.get('carton_photo'),
         'products': products,
@@ -327,7 +327,7 @@ async def create_parcel(body: ParcelCreate, owner: dict = Depends(require_role(R
     doc = {
         'id': str(uuid.uuid4()),
         'parcel_number': parcel_number,
-        'company_name': body.company_name.strip(),
+        'company_name': (body.company_name.strip() if body.company_name else None) or None,
         'num_packages': int(body.num_packages),
         'carton_photo': body.carton_photo,
         'products': products,

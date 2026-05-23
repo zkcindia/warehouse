@@ -84,7 +84,6 @@ export default function AddParcelModal({ open, onClose, onCreated }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!companyName.trim()) return toast.error("Company name is required.");
     if (!numPackages || Number(numPackages) < 1) return toast.error("Number of packages must be at least 1.");
     const cleanProducts = products
       .map((p) => ({ name: p.name.trim(), quantity: Number(p.quantity) }))
@@ -95,7 +94,7 @@ export default function AddParcelModal({ open, onClose, onCreated }) {
     setSubmitting(true);
     try {
       const payload = {
-        company_name: companyName.trim(),
+        company_name: companyName.trim() || null,
         num_packages: Number(numPackages),
         carton_photo: photo || null,
         products: cleanProducts,
@@ -103,11 +102,11 @@ export default function AddParcelModal({ open, onClose, onCreated }) {
         payment_mode: paymentMade ? paymentMode : null,
       };
       const res = await axios.post(`${API}/parcels`, payload, { headers: authHeaders() });
-      toast.success(`Parcel ${res.data.parcel_number} created`);
+      toast.success(`Stock invoice ${res.data.parcel_number} created`);
       onCreated?.(res.data);
       close();
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Failed to create parcel");
+      toast.error(err?.response?.data?.detail || "Failed to create stock invoice");
     } finally {
       setSubmitting(false);
     }
@@ -129,7 +128,7 @@ export default function AddParcelModal({ open, onClose, onCreated }) {
               <Boxes className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-base font-semibold text-neutral-900">New incoming parcel</div>
+              <div className="text-base font-semibold text-neutral-900">Stock Invoice</div>
               <div className="text-xs text-neutral-500">Log products coming into the warehouse.</div>
             </div>
           </div>
@@ -269,8 +268,8 @@ export default function AddParcelModal({ open, onClose, onCreated }) {
           <div className="bg-neutral-50 border border-neutral-100 rounded-xl p-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-medium text-neutral-800">Payment made?</div>
-                <div className="text-xs text-neutral-500">Mark whether the parcel was paid for.</div>
+                <div className="text-sm font-medium text-neutral-800">Submit by payment mode?</div>
+                <div className="text-xs text-neutral-500">Was the parcel paid for at the time of submission?</div>
               </div>
               <div className="inline-flex bg-white border border-neutral-200 rounded-lg p-0.5">
                 <button
@@ -346,7 +345,7 @@ export default function AddParcelModal({ open, onClose, onCreated }) {
                 <Loader2 className="w-4 h-4 animate-spin" /> Submitting…
               </>
             ) : (
-              <>Submit parcel</>
+              <>Submit invoice</>
             )}
           </button>
         </div>

@@ -30,7 +30,7 @@ export default function ParcelDetailModal({ parcel, onClose }) {
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-100">
           <div>
-            <div className="text-xs uppercase tracking-wider text-neutral-400">Parcel detail</div>
+            <div className="text-xs uppercase tracking-wider text-neutral-400">Stock invoice</div>
             <div className="text-base font-semibold text-neutral-900">{parcel.parcel_number}</div>
           </div>
           <button
@@ -51,7 +51,7 @@ export default function ParcelDetailModal({ parcel, onClose }) {
           )}
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <InfoTile icon={Building2} label="Company" value={parcel.company_name} />
+            <InfoTile icon={Building2} label="Company" value={parcel.company_name || "—"} />
             <InfoTile icon={Package} label="Packages" value={parcel.num_packages} />
             <InfoTile icon={Boxes} label="Total units" value={parcel.total_quantity} />
             <InfoTile
