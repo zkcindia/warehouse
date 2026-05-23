@@ -1,22 +1,22 @@
 [
   {
-    "content": "Phase 2: Build backend - auth (JWT, bcrypt), owner seed, staff CRUD endpoints",
+    "content": "Backend: Add Parcel model + endpoints (POST/GET/DELETE /api/parcels)",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Build frontend - role selection landing, login form, dashboards, owner staff mgmt",
+    "content": "Frontend: Build Owner Warehouse Dashboard - parcels list + add parcel modal form",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Install dependencies (PyJWT, bcrypt; react-router-dom, sonner)",
+    "content": "Frontend: Carton image upload (base64) with preview",
     "status": "completed"
   },
   {
-    "content": "Phase 2: All user stories covered and verified manually",
+    "content": "Frontend: Dynamic products list (add/remove rows) + payment mode toggle",
     "status": "completed"
   },
   {
-    "content": "Phase 2: End to End Testing using Testing Agent",
-    "status": "completed"
+    "content": "End-to-end test with Testing Agent",
+    "status": "in_progress"
   }
 ]

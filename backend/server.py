@@ -75,6 +75,38 @@ class CreateStaffRequest(BaseModel):
     password: str = Field(min_length=6, max_length=100)
     role: Literal['warehouse', 'data_entry', 'verification']
 
+# ----- Parcel / Product models -----
+class ProductIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    quantity: int = Field(ge=1, le=1_000_000)
+
+class ProductOut(BaseModel):
+    id: str
+    name: str
+    quantity: int
+    created_at: datetime
+
+class ParcelCreate(BaseModel):
+    company_name: str = Field(min_length=1, max_length=120)
+    num_packages: int = Field(ge=1, le=100000)
+    carton_photo: Optional[str] = None  # data:image/...;base64,...
+    products: List[ProductIn] = Field(min_length=1)
+    payment_made: bool = False
+    payment_mode: Optional[Literal['upi', 'card', 'cash']] = None
+
+class ParcelOut(BaseModel):
+    id: str
+    parcel_number: str
+    company_name: str
+    num_packages: int
+    carton_photo: Optional[str] = None
+    products: List[ProductOut]
+    payment_made: bool
+    payment_mode: Optional[str] = None
+    total_quantity: int
+    created_at: datetime
+    created_by_name: str
+
 # =========================
 # Helpers
 # =========================
@@ -234,6 +266,127 @@ async def delete_staff(user_id: str, owner: dict = Depends(require_role(ROLE_OWN
         raise HTTPException(status_code=400, detail="Cannot delete an Owner account.")
     await db.users.delete_one({'id': user_id})
     return {"success": True, "id": user_id}
+
+# ============================================================
+# Parcels (incoming products from companies) - Owner managed
+# ============================================================
+def parcel_doc_to_out(doc: dict) -> dict:
+    created_at = doc.get('created_at')
+    if isinstance(created_at, str):
+        created_at = datetime.fromisoformat(created_at)
+    products = []
+    for p in doc.get('products', []):
+        p_created = p.get('created_at')
+        if isinstance(p_created, str):
+            p_created = datetime.fromisoformat(p_created)
+        products.append({
+            'id': p['id'],
+            'name': p['name'],
+            'quantity': p['quantity'],
+            'created_at': p_created,
+        })
+    total_qty = sum(p['quantity'] for p in products)
+    return {
+        'id': doc['id'],
+        'parcel_number': doc['parcel_number'],
+        'company_name': doc['company_name'],
+        'num_packages': doc['num_packages'],
+        'carton_photo': doc.get('carton_photo'),
+        'products': products,
+        'payment_made': doc.get('payment_made', False),
+        'payment_mode': doc.get('payment_mode'),
+        'total_quantity': total_qty,
+        'created_at': created_at,
+        'created_by_name': doc.get('created_by_name', 'Owner'),
+    }
+
+async def _next_parcel_number() -> str:
+    # Count-based sequence, padded to 4 digits, with PCL- prefix
+    count = await db.parcels.count_documents({})
+    return f"PCL-{count + 1:04d}"
+
+@api_router.post("/parcels", response_model=ParcelOut, status_code=201)
+async def create_parcel(body: ParcelCreate, owner: dict = Depends(require_role(ROLE_OWNER))):
+    if body.payment_made and not body.payment_mode:
+        raise HTTPException(status_code=400, detail="Payment mode is required when payment is made.")
+    if not body.payment_made:
+        body.payment_mode = None
+    # Validate image size if provided (rough check on base64 length ~ 4MB)
+    if body.carton_photo and len(body.carton_photo) > 6_000_000:
+        raise HTTPException(status_code=400, detail="Carton photo is too large (max ~4MB).")
+
+    now = datetime.now(timezone.utc)
+    parcel_number = await _next_parcel_number()
+    products = [{
+        'id': str(uuid.uuid4()),
+        'name': p.name.strip(),
+        'quantity': int(p.quantity),
+        'created_at': now.isoformat(),
+    } for p in body.products]
+
+    doc = {
+        'id': str(uuid.uuid4()),
+        'parcel_number': parcel_number,
+        'company_name': body.company_name.strip(),
+        'num_packages': int(body.num_packages),
+        'carton_photo': body.carton_photo,
+        'products': products,
+        'payment_made': bool(body.payment_made),
+        'payment_mode': body.payment_mode,
+        'created_at': now.isoformat(),
+        'created_by': owner['id'],
+        'created_by_name': owner['full_name'],
+    }
+    await db.parcels.insert_one(doc)
+    return parcel_doc_to_out(doc)
+
+@api_router.get("/parcels", response_model=List[ParcelOut])
+async def list_parcels(owner: dict = Depends(require_role(ROLE_OWNER))):
+    cursor = db.parcels.find({}, {'_id': 0}).sort('created_at', -1)
+    docs = await cursor.to_list(1000)
+    return [parcel_doc_to_out(d) for d in docs]
+
+@api_router.get("/parcels/{parcel_id}", response_model=ParcelOut)
+async def get_parcel(parcel_id: str, owner: dict = Depends(require_role(ROLE_OWNER))):
+    doc = await db.parcels.find_one({'id': parcel_id}, {'_id': 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Parcel not found.")
+    return parcel_doc_to_out(doc)
+
+@api_router.delete("/parcels/{parcel_id}")
+async def delete_parcel(parcel_id: str, owner: dict = Depends(require_role(ROLE_OWNER))):
+    res = await db.parcels.delete_one({'id': parcel_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Parcel not found.")
+    return {"success": True, "id": parcel_id}
+
+@api_router.get("/parcels/stats/summary")
+async def parcels_summary(owner: dict = Depends(require_role(ROLE_OWNER))):
+    total_parcels = await db.parcels.count_documents({})
+    paid = await db.parcels.count_documents({'payment_made': True})
+    unpaid = total_parcels - paid
+    # aggregate total quantity + packages
+    pipeline = [
+        {'$project': {
+            'num_packages': 1,
+            'total_qty': {'$sum': '$products.quantity'},
+        }},
+        {'$group': {
+            '_id': None,
+            'packages': {'$sum': '$num_packages'},
+            'units': {'$sum': '$total_qty'},
+        }}
+    ]
+    agg = await db.parcels.aggregate(pipeline).to_list(1)
+    packages = agg[0]['packages'] if agg else 0
+    units = agg[0]['units'] if agg else 0
+    return {
+        'total_parcels': total_parcels,
+        'paid': paid,
+        'unpaid': unpaid,
+        'total_packages': packages,
+        'total_units': units,
+    }
 
 # Include the router in the main app
 app.include_router(api_router)
