@@ -316,7 +316,7 @@ async def _next_parcel_number() -> str:
     return f"PCL-{val:04d}"
 
 @api_router.post("/parcels", response_model=ParcelOut, status_code=201)
-async def create_parcel(body: ParcelCreate, owner: dict = Depends(require_role(ROLE_OWNER))):
+async def create_parcel(body: ParcelCreate, user: dict = Depends(require_role(ROLE_WAREHOUSE))):
     if body.payment_made and not body.payment_mode:
         raise HTTPException(status_code=400, detail="Payment mode is required when payment is made.")
     if not body.payment_made:
@@ -345,34 +345,34 @@ async def create_parcel(body: ParcelCreate, owner: dict = Depends(require_role(R
         'payment_made': bool(body.payment_made),
         'payment_mode': body.payment_mode,
         'created_at': now.isoformat(),
-        'created_by': owner['id'],
-        'created_by_name': owner['full_name'],
+        'created_by': user['id'],
+        'created_by_name': user['full_name'],
     }
     await db.parcels.insert_one(doc)
     return parcel_doc_to_out(doc)
 
 @api_router.get("/parcels", response_model=List[ParcelOut])
-async def list_parcels(owner: dict = Depends(require_role(ROLE_OWNER))):
+async def list_parcels(user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE))):
     cursor = db.parcels.find({}, {'_id': 0}).sort('created_at', -1)
     docs = await cursor.to_list(1000)
     return [parcel_doc_to_out(d) for d in docs]
 
 @api_router.get("/parcels/{parcel_id}", response_model=ParcelOut)
-async def get_parcel(parcel_id: str, owner: dict = Depends(require_role(ROLE_OWNER))):
+async def get_parcel(parcel_id: str, user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE))):
     doc = await db.parcels.find_one({'id': parcel_id}, {'_id': 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Parcel not found.")
     return parcel_doc_to_out(doc)
 
 @api_router.delete("/parcels/{parcel_id}")
-async def delete_parcel(parcel_id: str, owner: dict = Depends(require_role(ROLE_OWNER))):
+async def delete_parcel(parcel_id: str, user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE))):
     res = await db.parcels.delete_one({'id': parcel_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Parcel not found.")
     return {"success": True, "id": parcel_id}
 
 @api_router.get("/parcels/stats/summary")
-async def parcels_summary(owner: dict = Depends(require_role(ROLE_OWNER))):
+async def parcels_summary(user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE))):
     total_parcels = await db.parcels.count_documents({})
     paid = await db.parcels.count_documents({'payment_made': True})
     unpaid = total_parcels - paid

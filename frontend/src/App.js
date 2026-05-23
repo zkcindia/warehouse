@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import RoleSelectionPage from "@/pages/RoleSelectionPage";
 import LoginPage from "@/pages/LoginPage";
 import OwnerDashboard from "@/pages/OwnerDashboard";
+import WarehouseDashboard from "@/pages/WarehouseDashboard";
 import StaffDashboard from "@/pages/StaffDashboard";
 
 function ProtectedRoute({ children, allowedRoles }) {
@@ -62,7 +63,7 @@ function App() {
               path="/dashboard/warehouse"
               element={
                 <ProtectedRoute allowedRoles={["warehouse"]}>
-                  <StaffDashboard />
+                  <WarehouseDashboard />
                 </ProtectedRoute>
               }
             />
