@@ -567,7 +567,7 @@ class CourierEntry(BaseModel):
     receiver_name: Optional[str] = Field(default=None, max_length=120)
     num_packages: int = Field(ge=1, le=100000)
     slip_photo: Optional[str] = None
-    products: List[ProductIn] = Field(min_length=1)
+    products: List[ProductIn] = Field(default_factory=list)
     charges: Optional[float] = Field(default=None, ge=0)
     payment_made: bool = False
     payment_mode: Optional[Literal['upi', 'card', 'cash']] = None
@@ -575,6 +575,28 @@ class CourierEntry(BaseModel):
 class CourierBatchCreate(BaseModel):
     handled_by: Optional[str] = Field(default=None, max_length=80)
     entries: List[CourierEntry] = Field(min_length=1, max_length=50)
+
+# Warehouse checklist items (fixed set)
+COURIER_CHECKLIST_KEYS = [
+    'master_carton',
+    'label_check',
+    'bills_check',
+    'quantity_verify',
+    'damage_check',
+    'photo_taken',
+]
+
+def _default_checklist() -> dict:
+    return {k: False for k in COURIER_CHECKLIST_KEYS}
+
+def _normalize_checklist(raw: Optional[dict]) -> dict:
+    out = _default_checklist()
+    if not raw or not isinstance(raw, dict):
+        return out
+    for k in COURIER_CHECKLIST_KEYS:
+        out[k] = bool(raw.get(k, False))
+    return out
+
 
 class CourierOut(BaseModel):
     id: str
@@ -590,6 +612,7 @@ class CourierOut(BaseModel):
     payment_made: bool
     payment_mode: Optional[str] = None
     total_quantity: int
+    checklist: dict
     created_at: datetime
     created_by_name: str
 
@@ -624,6 +647,7 @@ def courier_doc_to_out(doc: dict) -> dict:
         'payment_made': doc.get('payment_made', False),
         'payment_mode': doc.get('payment_mode'),
         'total_quantity': total_qty,
+        'checklist': _normalize_checklist(doc.get('checklist')),
         'created_at': created_at,
         'created_by_name': doc.get('created_by_name', 'Cashier'),
     }
@@ -769,6 +793,31 @@ async def delete_courier_product(cid: str, product_id: str, user: dict = Depends
         await db.couriers.delete_one({'id': cid})
         raise HTTPException(status_code=410, detail="Last product removed; courier entry deleted.")
     await db.couriers.update_one({'id': cid}, {'$set': {'products': products}})
+    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    return courier_doc_to_out(updated)
+
+# --- Per-courier warehouse checklist ---
+class ChecklistUpdate(BaseModel):
+    checklist: dict
+
+@api_router.patch("/couriers/{cid}/checklist", response_model=CourierOut)
+async def update_courier_checklist(
+    cid: str,
+    body: ChecklistUpdate,
+    user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE, ROLE_VERIFICATION)),
+):
+    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Courier entry not found.")
+    normalized = _normalize_checklist(body.checklist)
+    await db.couriers.update_one(
+        {'id': cid},
+        {'$set': {
+            'checklist': normalized,
+            'checklist_updated_at': datetime.now(timezone.utc).isoformat(),
+            'checklist_updated_by': user['full_name'],
+        }},
+    )
     updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
     return courier_doc_to_out(updated)
 

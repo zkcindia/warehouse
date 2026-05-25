@@ -1,22 +1,18 @@
 [
   {
-    "content": "Backend: Add Parcel model + endpoints (POST/GET/DELETE /api/parcels)",
+    "content": "Backend: Add checklist field to courier model + PATCH endpoint",
     "status": "completed"
   },
   {
-    "content": "Frontend: Build Owner Warehouse Dashboard - parcels list + add parcel modal form",
+    "content": "Frontend: Create CourierChecklistModal component with checkboxes",
     "status": "completed"
   },
   {
-    "content": "Frontend: Carton image upload (base64) with preview",
+    "content": "Frontend: Add 'Checklist' button on each courier card with progress badge",
     "status": "completed"
   },
   {
-    "content": "Frontend: Dynamic products list (add/remove rows) + payment mode toggle",
-    "status": "completed"
-  },
-  {
-    "content": "End-to-end test with Testing Agent",
+    "content": "Test end-to-end (save, persist, reload)",
     "status": "completed"
   }
 ]

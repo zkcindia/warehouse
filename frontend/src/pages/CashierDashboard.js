@@ -44,21 +44,12 @@ const emptyEntry = () => ({
   courier_company: "",
   num_packages: "",
   photo: null,
-  products: [{ name: "", quantity: "" }],
   payment_mode: "none",
 });
 
 function CourierEntryCard({ entry, index, total, onChange, onRemove }) {
   const fileRef = useRef(null);
   const update = (patch) => onChange({ ...entry, ...patch });
-  const updateProduct = (idx, field, val) => {
-    const products = entry.products.map((p, i) => (i === idx ? { ...p, [field]: val } : p));
-    update({ products });
-  };
-  const addProduct = () => update({ products: [...entry.products, { name: "", quantity: "" }] });
-  const removeProduct = (idx) =>
-    entry.products.length > 1 &&
-    update({ products: entry.products.filter((_, i) => i !== idx) });
 
   const handlePhoto = async (e) => {
     const file = e.target.files?.[0];
@@ -72,9 +63,6 @@ function CourierEntryCard({ entry, index, total, onChange, onRemove }) {
     }
   };
 
-  const totalUnits = entry.products.reduce((s, p) => s + (Number(p.quantity) || 0), 0);
-  const filledProducts = entry.products.filter((p) => p.name.trim() && Number(p.quantity) > 0).length;
-
   return (
     <div className="bg-white border border-neutral-200 rounded-2xl divide-y divide-neutral-100 fade-in">
       <div className="flex items-center justify-between px-5 py-3 bg-neutral-50/60 rounded-t-2xl">
@@ -87,8 +75,7 @@ function CourierEntryCard({ entry, index, total, onChange, onRemove }) {
               {entry.courier_company?.trim() || `Courier #${index + 1}`}
             </div>
             <div className="text-[11px] text-neutral-500">
-              {filledProducts} item{filledProducts === 1 ? "" : "s"} · {totalUnits} units
-              {entry.num_packages ? ` · ${entry.num_packages} pkgs` : ""}
+              {entry.num_packages ? `${entry.num_packages} packages` : "—"}
             </div>
           </div>
         </div>
@@ -166,56 +153,6 @@ function CourierEntryCard({ entry, index, total, onChange, onRemove }) {
           </div>
         </div>
 
-        {/* Items / Products */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
-                <Package className="w-3.5 h-3.5" /> Items in this courier
-              </label>
-              <p className="text-[11px] text-neutral-400">Each item gets a unique ID and timestamp on save.</p>
-            </div>
-            <button
-              type="button"
-              data-testid={`courier-add-item-${index}`}
-              onClick={addProduct}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add item
-            </button>
-          </div>
-          <div className="space-y-2">
-            {entry.products.map((p, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <input
-                  data-testid={`courier-item-name-${index}-${idx}`}
-                  value={p.name}
-                  onChange={(e) => updateProduct(idx, "name", e.target.value)}
-                  placeholder="Item name"
-                  className="flex-1 px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                />
-                <input
-                  data-testid={`courier-item-qty-${index}-${idx}`}
-                  type="number"
-                  min="1"
-                  value={p.quantity}
-                  onChange={(e) => updateProduct(idx, "quantity", e.target.value)}
-                  placeholder="Qty"
-                  className="w-24 px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeProduct(idx)}
-                  disabled={entry.products.length === 1}
-                  className="p-2 rounded-lg border border-neutral-200 text-neutral-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-neutral-500 disabled:hover:border-neutral-200"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* Payment mode */}
         <div>
           <div className="text-xs font-medium text-neutral-600 mb-2">Payment mode</div>
@@ -256,16 +193,10 @@ export default function CashierDashboard() {
   const [lastBatch, setLastBatch] = useState(null);
 
   const totals = entries.reduce(
-    (acc, e) => {
-      const units = e.products.reduce((s, p) => s + (Number(p.quantity) || 0), 0);
-      const items = e.products.filter((p) => p.name.trim() && Number(p.quantity) > 0).length;
-      return {
-        packages: acc.packages + (Number(e.num_packages) || 0),
-        units: acc.units + units,
-        items: acc.items + items,
-      };
-    },
-    { packages: 0, units: 0, items: 0 }
+    (acc, e) => ({
+      packages: acc.packages + (Number(e.num_packages) || 0),
+    }),
+    { packages: 0 }
   );
 
   const updateEntry = (idx, ne) =>
@@ -283,8 +214,6 @@ export default function CashierDashboard() {
       const e = entries[i];
       if (!e.num_packages || Number(e.num_packages) < 1)
         return `Courier #${i + 1}: enter number of packages.`;
-      const valid = e.products.filter((p) => p.name.trim() && Number(p.quantity) > 0);
-      if (valid.length === 0) return `Courier #${i + 1}: add at least one item.`;
     }
     return null;
   };
@@ -300,14 +229,11 @@ export default function CashierDashboard() {
         handled_by: handledBy.trim() || null,
         entries: entries.map((en) => {
           const isPaid = en.payment_mode !== "none";
-          const cleanProducts = en.products
-            .map((p) => ({ name: p.name.trim(), quantity: Number(p.quantity) }))
-            .filter((p) => p.name && p.quantity > 0);
           return {
             courier_company: en.courier_company.trim() || null,
             num_packages: Number(en.num_packages),
             slip_photo: en.photo || null,
-            products: cleanProducts,
+            products: [],
             payment_made: isPaid,
             payment_mode: isPaid ? en.payment_mode : null,
           };
@@ -359,7 +285,6 @@ export default function CashierDashboard() {
                   {lastBatch.map((c) => (
                     <li key={c.id} className="truncate">
                       <span className="font-mono">{c.courier_number}</span> ·{" "}
-                      {c.products.map((p) => `${p.name} (${p.quantity})`).join(", ")} ·{" "}
                       {c.num_packages} pkgs
                       {c.courier_company ? ` · ${c.courier_company}` : ""}
                     </li>
@@ -384,9 +309,6 @@ export default function CashierDashboard() {
             </span>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-neutral-200 text-neutral-700">
               <Package className="w-3.5 h-3.5" /> {totals.packages} packages
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-neutral-200 text-neutral-700">
-              <Building2 className="w-3.5 h-3.5" /> {totals.items} items · {totals.units} units
             </span>
           </div>
 
@@ -430,7 +352,7 @@ export default function CashierDashboard() {
             <div className="bg-white border border-neutral-200 rounded-2xl px-5 py-3 flex items-center justify-between gap-3 shadow-sm">
               <div className="text-xs text-neutral-500">
                 Submitting <span className="font-semibold text-neutral-800">{entries.length}</span> courier{entries.length === 1 ? "" : "s"} ·{" "}
-                <span className="font-semibold text-neutral-800">{totals.units}</span> units
+                <span className="font-semibold text-neutral-800">{totals.packages}</span> packages
               </div>
               <div className="flex items-center gap-2">
                 <button
