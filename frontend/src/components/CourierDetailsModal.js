@@ -121,10 +121,6 @@ export default function CourierDetailsModal({ courier, onClose, onUpdated, onDel
 
   const handleSave = async () => {
     if (!packages || Number(packages) < 1) return toast.error("Number of packages must be at least 1.");
-    const cleanProducts = products
-      .map((p) => ({ name: p.name.trim(), quantity: Number(p.quantity) }))
-      .filter((p) => p.name && p.quantity > 0);
-    if (cleanProducts.length === 0) return toast.error("At least one item is required.");
     setSaving(true);
     try {
       const isPaid = paymentMode !== "none";
@@ -138,7 +134,6 @@ export default function CourierDetailsModal({ courier, onClose, onUpdated, onDel
         handled_by: handledBy.trim() || "",
         payment_made: isPaid,
         payment_mode: isPaid ? paymentMode : null,
-        products: cleanProducts,
       };
       if (photoField !== undefined) payload.slip_photo = photoField;
       const res = await axios.patch(`${API}/couriers/${courier.id}`, payload, {
@@ -322,49 +317,6 @@ export default function CourierDetailsModal({ courier, onClose, onUpdated, onDel
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
-                    <Package className="w-3.5 h-3.5" /> Items
-                  </label>
-                  <button
-                    type="button"
-                    onClick={addProductRow}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Add item
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {products.map((p, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <input
-                        value={p.name}
-                        onChange={(e) => updateProduct(idx, "name", e.target.value)}
-                        placeholder="Item name"
-                        className="flex-1 px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                      />
-                      <input
-                        type="number"
-                        min="1"
-                        value={p.quantity}
-                        onChange={(e) => updateProduct(idx, "quantity", e.target.value)}
-                        placeholder="Qty"
-                        className="w-24 px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeProductRow(idx)}
-                        disabled={products.length === 1}
-                        className="p-2 rounded-lg border border-neutral-200 text-neutral-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-neutral-500 disabled:hover:border-neutral-200"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
                 <label className="text-xs font-medium text-neutral-600">Handled by</label>
                 <input
                   value={handledBy}
@@ -445,8 +397,7 @@ export default function CourierDetailsModal({ courier, onClose, onUpdated, onDel
           ) : (
             <>
               <div className="text-[11px] text-neutral-400">
-                {products.length} item{products.length === 1 ? "" : "s"} ·{" "}
-                {products.reduce((s, p) => s + (Number(p.quantity) || 0), 0)} units
+                {(courier.products?.length || 0)} item{(courier.products?.length || 0) === 1 ? "" : "s"}
               </div>
               <div className="flex items-center gap-2">
                 <button
