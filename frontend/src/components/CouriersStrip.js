@@ -16,7 +16,6 @@ import {
   Wallet,
   ChevronRight,
   ClipboardCheck,
-  PackagePlus,
   Package,
 } from "lucide-react";
 
@@ -181,8 +180,8 @@ export default function CouriersStrip() {
                   )}
                 </button>
 
-                {/* Action buttons */}
-                <div className="mt-3 flex flex-col gap-2">
+                {/* Action button (checklist only — items live in global Inventory tab) */}
+                <div className="mt-3">
                   <button
                     type="button"
                     onClick={(e) => {
@@ -190,7 +189,7 @@ export default function CouriersStrip() {
                       setChecklistFor(c);
                     }}
                     data-testid={`open-checklist-btn-${c.courier_number}`}
-                    className={`inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                    className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
                       cp.complete
                         ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
                         : "bg-neutral-900 border-neutral-900 text-white hover:bg-neutral-800"
@@ -199,23 +198,6 @@ export default function CouriersStrip() {
                     <ClipboardCheck className="w-4 h-4" />
                     {cp.complete ? "Checklist complete" : "Open checklist"}
                   </button>
-
-                  {cp.complete && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setItemsFor(c);
-                      }}
-                      data-testid={`add-items-btn-${c.courier_number}`}
-                      className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border bg-blue-600 border-blue-600 text-white hover:bg-blue-700"
-                    >
-                      <PackagePlus className="w-4 h-4" />
-                      {c.products && c.products.length > 0
-                        ? "Manage items"
-                        : "Add items"}
-                    </button>
-                  )}
                 </div>
               </div>
             );

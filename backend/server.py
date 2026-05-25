@@ -933,6 +933,44 @@ async def remove_courier_item(
     return courier_doc_to_out(updated)
 
 
+# --- Global inventory: flat list of items across all couriers ---
+@api_router.get("/inventory/items")
+async def list_inventory_items(
+    user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE, ROLE_VERIFICATION)),
+):
+    cursor = db.couriers.find({}, {'_id': 0}).sort('created_at', -1)
+    rows = []
+    async for doc in cursor:
+        courier_number = doc.get('courier_number')
+        courier_company = doc.get('courier_company')
+        courier_id = doc.get('id')
+        checklist = _normalize_checklist(doc.get('checklist'))
+        checklist_complete = all(checklist.get(k) for k in COURIER_CHECKLIST_KEYS)
+        for p in doc.get('products', []):
+            p_created = p.get('created_at')
+            if isinstance(p_created, str):
+                try:
+                    p_created = datetime.fromisoformat(p_created)
+                except Exception:
+                    p_created = None
+            rows.append({
+                'item_id': p.get('id'),
+                'name': p.get('name'),
+                'quantity': int(p.get('quantity', 0)),
+                'photo': p.get('photo'),
+                'damaged': bool(p.get('damaged', False)),
+                'damaged_count': int(p.get('damaged_count', 0)),
+                'created_at': p_created,
+                'courier_id': courier_id,
+                'courier_number': courier_number,
+                'courier_company': courier_company,
+                'checklist_complete': checklist_complete,
+            })
+    # newest items first
+    rows.sort(key=lambda r: r.get('created_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    return rows
+
+
 # Include the router in the main app
 app.include_router(api_router)
 

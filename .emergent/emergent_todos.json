@@ -1,22 +1,22 @@
 [
   {
-    "content": "Backend: Extend product schema (photo, damaged, damaged_count) + add POST /couriers/{cid}/items with auto-merge on same name",
+    "content": "Backend: Add GET /api/inventory/items endpoint returning flat list of all items across couriers",
     "status": "completed"
   },
   {
-    "content": "Frontend: Add 'Next' button in checklist modal (enabled only when all 6 ticked)",
+    "content": "Frontend: Add tabs (Couriers | Inventory) to Warehouse dashboard; remove 'Manage items' button from courier cards",
     "status": "completed"
   },
   {
-    "content": "Frontend: Create CourierItemsModal — list existing items + add-item form with photo/name/qty/damaged",
+    "content": "Frontend: Build InventoryTable component with photo/name/qty/damaged/courier columns + delete action",
     "status": "completed"
   },
   {
-    "content": "Frontend: Wire flow — checklist complete → Next → items modal; also accessible from card when checklist complete",
+    "content": "Frontend: 'Add Item' dialog that includes courier selector + reuses item form (auto-merge logic intact)",
     "status": "completed"
   },
   {
-    "content": "Test end-to-end flow",
+    "content": "Test end-to-end",
     "status": "completed"
   }
 ]
