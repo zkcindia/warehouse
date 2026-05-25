@@ -107,62 +107,44 @@ export default function CouriersStrip() {
             >
               {/* Header row */}
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-neutral-900 text-white text-xs font-bold font-mono">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-neutral-900 text-white text-xs font-bold font-mono shrink-0">
                     {c.courier_number.replace("CRX-", "")}
                   </span>
                   <div className="min-w-0">
                     <div className="text-sm font-bold text-neutral-900 font-mono leading-tight">
                       {c.courier_number}
                     </div>
-                    {c.courier_company && (
+                    {c.courier_company ? (
                       <div className="text-[11px] text-neutral-500 truncate flex items-center gap-1">
                         <Truck className="w-3 h-3" /> {c.courier_company}
                       </div>
+                    ) : (
+                      <div className="text-[11px] text-neutral-400 italic">No company</div>
                     )}
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-neutral-300 group-hover:text-neutral-900 transition-colors" />
+                <ChevronRight className="w-4 h-4 text-neutral-300 group-hover:text-neutral-900 transition-colors shrink-0" />
               </div>
 
-              {/* Products list */}
-              <div className="space-y-1 mb-3">
-                <div className="text-[10px] uppercase tracking-wider text-neutral-400 font-medium">
+              {/* Products list — what cashier added */}
+              <div className="border-t border-neutral-100 pt-3">
+                <div className="text-[10px] uppercase tracking-wider text-neutral-400 font-medium mb-1.5">
                   Products ({c.products.length})
                 </div>
-                <ul className="space-y-0.5">
-                  {c.products.slice(0, 3).map((p) => (
-                    <li key={p.id} className="flex items-center justify-between text-xs">
+                <ul className="space-y-1">
+                  {c.products.map((p) => (
+                    <li
+                      key={p.id}
+                      className="flex items-center justify-between text-xs"
+                    >
                       <span className="text-neutral-800 truncate font-medium">{p.name}</span>
-                      <span className="text-neutral-500 font-semibold tabular-nums ml-2">
+                      <span className="text-neutral-600 font-semibold tabular-nums ml-2">
                         ×{p.quantity}
                       </span>
                     </li>
                   ))}
-                  {c.products.length > 3 && (
-                    <li className="text-[11px] text-neutral-400">
-                      + {c.products.length - 3} more…
-                    </li>
-                  )}
                 </ul>
-              </div>
-
-              {/* Footer chips */}
-              <div className="pt-3 border-t border-neutral-100 flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2 text-[11px] text-neutral-500">
-                  <span className="inline-flex items-center gap-1">
-                    <Package className="w-3 h-3" /> {c.num_packages} pkgs
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Boxes className="w-3 h-3" /> {c.total_quantity} units
-                  </span>
-                  {c.handled_by && (
-                    <span className="inline-flex items-center gap-1 truncate max-w-[120px]">
-                      <UserRound className="w-3 h-3" /> {c.handled_by}
-                    </span>
-                  )}
-                </div>
-                <PaymentBadge paid={c.payment_made} mode={c.payment_mode} />
               </div>
             </button>
           ))}
