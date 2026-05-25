@@ -7,6 +7,7 @@ import RoleSelectionPage from "@/pages/RoleSelectionPage";
 import LoginPage from "@/pages/LoginPage";
 import OwnerDashboard from "@/pages/OwnerDashboard";
 import WarehouseDashboard from "@/pages/WarehouseDashboard";
+import CashierDashboard from "@/pages/CashierDashboard";
 import StaffDashboard from "@/pages/StaffDashboard";
 
 function ProtectedRoute({ children, allowedRoles }) {
@@ -63,7 +64,7 @@ function App() {
               path="/dashboard/cashier"
               element={
                 <ProtectedRoute allowedRoles={["cashier"]}>
-                  <StaffDashboard />
+                  <CashierDashboard />
                 </ProtectedRoute>
               }
             />

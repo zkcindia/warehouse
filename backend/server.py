@@ -558,6 +558,220 @@ async def delete_product(parcel_id: str, product_id: str, user: dict = Depends(r
     updated = await db.parcels.find_one({'id': parcel_id}, {'_id': 0})
     return parcel_doc_to_out(updated)
 
+# ============================================================
+# Couriers (outgoing shipments) - Cashier managed
+# ============================================================
+class CourierEntry(BaseModel):
+    courier_company: Optional[str] = Field(default=None, max_length=120)
+    tracking_number: Optional[str] = Field(default=None, max_length=80)
+    receiver_name: Optional[str] = Field(default=None, max_length=120)
+    num_packages: int = Field(ge=1, le=100000)
+    slip_photo: Optional[str] = None
+    products: List[ProductIn] = Field(min_length=1)
+    charges: Optional[float] = Field(default=None, ge=0)
+    payment_made: bool = False
+    payment_mode: Optional[Literal['upi', 'card', 'cash']] = None
+
+class CourierBatchCreate(BaseModel):
+    handled_by: Optional[str] = Field(default=None, max_length=80)
+    entries: List[CourierEntry] = Field(min_length=1, max_length=50)
+
+class CourierOut(BaseModel):
+    id: str
+    courier_number: str
+    courier_company: Optional[str] = None
+    tracking_number: Optional[str] = None
+    receiver_name: Optional[str] = None
+    num_packages: int
+    slip_photo: Optional[str] = None
+    products: List[ProductOut]
+    handled_by: Optional[str] = None
+    charges: Optional[float] = None
+    payment_made: bool
+    payment_mode: Optional[str] = None
+    total_quantity: int
+    created_at: datetime
+    created_by_name: str
+
+
+def courier_doc_to_out(doc: dict) -> dict:
+    created_at = doc.get('created_at')
+    if isinstance(created_at, str):
+        created_at = datetime.fromisoformat(created_at)
+    products = []
+    for p in doc.get('products', []):
+        p_created = p.get('created_at')
+        if isinstance(p_created, str):
+            p_created = datetime.fromisoformat(p_created)
+        products.append({
+            'id': p['id'],
+            'name': p['name'],
+            'quantity': p['quantity'],
+            'created_at': p_created,
+        })
+    total_qty = sum(p['quantity'] for p in products)
+    return {
+        'id': doc['id'],
+        'courier_number': doc['courier_number'],
+        'courier_company': doc.get('courier_company'),
+        'tracking_number': doc.get('tracking_number'),
+        'receiver_name': doc.get('receiver_name'),
+        'num_packages': doc['num_packages'],
+        'slip_photo': doc.get('slip_photo'),
+        'products': products,
+        'handled_by': doc.get('handled_by'),
+        'charges': doc.get('charges'),
+        'payment_made': doc.get('payment_made', False),
+        'payment_mode': doc.get('payment_mode'),
+        'total_quantity': total_qty,
+        'created_at': created_at,
+        'created_by_name': doc.get('created_by_name', 'Cashier'),
+    }
+
+async def _next_courier_number() -> str:
+    res = await db.counters.find_one_and_update(
+        {'_id': 'courier_number'},
+        {'$inc': {'value': 1}},
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
+    val = (res or {}).get('value') or 1
+    return f"CRX-{val:04d}"
+
+@api_router.post("/couriers/batch", status_code=201)
+async def create_couriers_batch(body: CourierBatchCreate, user: dict = Depends(require_role(ROLE_CASHIER))):
+    for idx, e in enumerate(body.entries):
+        if e.payment_made and not e.payment_mode:
+            raise HTTPException(status_code=400, detail=f"Entry {idx + 1}: payment mode is required when payment is made.")
+        if not e.payment_made:
+            e.payment_mode = None
+        if e.slip_photo and len(e.slip_photo) > 6_000_000:
+            raise HTTPException(status_code=400, detail=f"Entry {idx + 1}: slip photo is too large (max ~4MB).")
+
+    handled_by = (body.handled_by.strip() if body.handled_by else None) or None
+    now = datetime.now(timezone.utc)
+    created = []
+    for e in body.entries:
+        courier_number = await _next_courier_number()
+        products = [{
+            'id': str(uuid.uuid4()),
+            'name': p.name.strip(),
+            'quantity': int(p.quantity),
+            'created_at': now.isoformat(),
+        } for p in e.products]
+        doc = {
+            'id': str(uuid.uuid4()),
+            'courier_number': courier_number,
+            'courier_company': (e.courier_company.strip() if e.courier_company else None) or None,
+            'tracking_number': (e.tracking_number.strip() if e.tracking_number else None) or None,
+            'receiver_name': (e.receiver_name.strip() if e.receiver_name else None) or None,
+            'num_packages': int(e.num_packages),
+            'slip_photo': e.slip_photo,
+            'products': products,
+            'handled_by': handled_by,
+            'charges': float(e.charges) if e.charges is not None else None,
+            'payment_made': bool(e.payment_made),
+            'payment_mode': e.payment_mode,
+            'created_at': now.isoformat(),
+            'created_by': user['id'],
+            'created_by_name': user['full_name'],
+        }
+        await db.couriers.insert_one(doc)
+        created.append(courier_doc_to_out(doc))
+    return {"created": created, "count": len(created)}
+
+@api_router.get("/couriers", response_model=List[CourierOut])
+async def list_couriers(user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER))):
+    cursor = db.couriers.find({}, {'_id': 0}).sort('created_at', -1)
+    docs = await cursor.to_list(1000)
+    return [courier_doc_to_out(d) for d in docs]
+
+@api_router.delete("/couriers/{cid}")
+async def delete_courier(cid: str, user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER))):
+    res = await db.couriers.delete_one({'id': cid})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Courier entry not found.")
+    return {"success": True, "id": cid}
+
+class CourierPatch(BaseModel):
+    courier_company: Optional[str] = Field(default=None, max_length=120)
+    tracking_number: Optional[str] = Field(default=None, max_length=80)
+    receiver_name: Optional[str] = Field(default=None, max_length=120)
+    num_packages: Optional[int] = Field(default=None, ge=1, le=100000)
+    slip_photo: Optional[str] = None
+    handled_by: Optional[str] = Field(default=None, max_length=80)
+    charges: Optional[float] = Field(default=None, ge=0)
+    payment_made: Optional[bool] = None
+    payment_mode: Optional[Literal['upi', 'card', 'cash']] = None
+    products: Optional[List[ProductIn]] = None
+
+@api_router.patch("/couriers/{cid}", response_model=CourierOut)
+async def patch_courier(cid: str, body: CourierPatch, user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER))):
+    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Courier entry not found.")
+    update = {}
+    for f in ['courier_company', 'tracking_number', 'receiver_name', 'handled_by']:
+        v = getattr(body, f)
+        if v is not None:
+            update[f] = v.strip() or None
+    if body.num_packages is not None:
+        update['num_packages'] = int(body.num_packages)
+    if body.slip_photo is not None:
+        if body.slip_photo == '':
+            update['slip_photo'] = None
+        else:
+            if len(body.slip_photo) > 6_000_000:
+                raise HTTPException(status_code=400, detail="Slip photo is too large (max ~4MB).")
+            update['slip_photo'] = body.slip_photo
+    if body.charges is not None:
+        update['charges'] = float(body.charges)
+    if body.payment_made is not None:
+        update['payment_made'] = bool(body.payment_made)
+        if not body.payment_made:
+            update['payment_mode'] = None
+        else:
+            mode = body.payment_mode if body.payment_mode is not None else doc.get('payment_mode')
+            if not mode:
+                raise HTTPException(status_code=400, detail="Payment mode required when paid.")
+            update['payment_mode'] = mode
+    elif body.payment_mode is not None:
+        update['payment_mode'] = body.payment_mode
+    if body.products is not None:
+        if len(body.products) < 1:
+            raise HTTPException(status_code=400, detail="At least one product required.")
+        existing = doc.get('products', [])
+        new_products = []
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for i, p in enumerate(body.products):
+            base = existing[i] if i < len(existing) else None
+            new_products.append({
+                'id': base['id'] if base else str(uuid.uuid4()),
+                'name': p.name.strip(),
+                'quantity': int(p.quantity),
+                'created_at': base['created_at'] if base else now_iso,
+            })
+        update['products'] = new_products
+    if update:
+        await db.couriers.update_one({'id': cid}, {'$set': update})
+    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    return courier_doc_to_out(updated)
+
+@api_router.delete("/couriers/{cid}/products/{product_id}", response_model=CourierOut)
+async def delete_courier_product(cid: str, product_id: str, user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER))):
+    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Courier entry not found.")
+    products = [p for p in doc.get('products', []) if p['id'] != product_id]
+    if len(products) == len(doc.get('products', [])):
+        raise HTTPException(status_code=404, detail="Product not found in this courier entry.")
+    if not products:
+        await db.couriers.delete_one({'id': cid})
+        raise HTTPException(status_code=410, detail="Last product removed; courier entry deleted.")
+    await db.couriers.update_one({'id': cid}, {'$set': {'products': products}})
+    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    return courier_doc_to_out(updated)
+
 # Include the router in the main app
 app.include_router(api_router)
 
