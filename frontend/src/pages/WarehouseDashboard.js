@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import DashboardShell from "@/components/DashboardShell";
 import CouriersStrip from "@/components/CouriersStrip";
-import InventoryTable from "@/components/InventoryTable";
 import AddInventoryItemDialog from "@/components/AddInventoryItemDialog";
 import { useAuth } from "@/context/AuthContext";
 import { Boxes, Plus, Lock, PackagePlus } from "lucide-react";
@@ -125,8 +124,7 @@ export default function WarehouseDashboard() {
           </div>
         </div>
 
-        {/* Global inventory table */}
-        <InventoryTable refreshNonce={refreshNonce} />
+        {/* Global inventory table removed per request */}
       </div>
 
       <AddInventoryItemDialog
