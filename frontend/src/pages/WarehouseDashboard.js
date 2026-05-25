@@ -35,6 +35,10 @@ export default function WarehouseDashboard() {
     loadCouriers();
   }, [loadCouriers, refreshNonce]);
 
+  const handleCouriersChange = useCallback(() => {
+    setRefreshNonce((n) => n + 1);
+  }, []);
+
   const eligibleCount = useMemo(
     () =>
       couriers.filter((c) => {
@@ -72,7 +76,7 @@ export default function WarehouseDashboard() {
         </div>
 
         {/* Couriers section (cards) */}
-        <CouriersStrip onCouriersChange={() => setRefreshNonce((n) => n + 1)} />
+        <CouriersStrip onCouriersChange={handleCouriersChange} />
 
         {/* Add item CTA bar — between courier cards and global table */}
         <div className="bg-white border border-neutral-200 rounded-2xl p-5">

@@ -67,13 +67,12 @@ export default function CouriersStrip({ onCouriersChange }) {
     try {
       const res = await axios.get(`${API}/couriers`, { headers: authHeaders() });
       setCouriers(res.data || []);
-      onCouriersChange?.();
     } catch (e) {
       // silent
     } finally {
       setLoading(false);
     }
-  }, [API, authHeaders, onCouriersChange]);
+  }, [API, authHeaders]);
 
   useEffect(() => {
     load();
@@ -212,7 +211,10 @@ export default function CouriersStrip({ onCouriersChange }) {
         courier={open}
         onClose={() => setOpen(null)}
         onUpdated={applyUpdate}
-        onDeleted={(id) => setCouriers((arr) => arr.filter((c) => c.id !== id))}
+        onDeleted={(id) => {
+          setCouriers((arr) => arr.filter((c) => c.id !== id));
+          onCouriersChange?.();
+        }}
       />
       <CourierChecklistModal
         courier={checklistFor}
