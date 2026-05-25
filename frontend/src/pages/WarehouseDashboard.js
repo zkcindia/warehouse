@@ -19,9 +19,11 @@ import {
   RefreshCw,
   Building2,
   Pencil,
+  CheckSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import EditInvoiceModal from "@/components/EditInvoiceModal";
+import ChecklistView from "@/components/ChecklistView";
 
 const MAX_IMG_BYTES = 4 * 1024 * 1024; // 4MB
 
@@ -278,6 +280,7 @@ export default function WarehouseDashboard() {
   const [entries, setEntries] = useState([emptyEntry()]);
   const [submittedBy, setSubmittedBy] = useState("");
   const [lastBatch, setLastBatch] = useState(null);
+  const [showChecklist, setShowChecklist] = useState(false);
 
   const totals = entries.reduce(
     (acc, e) => {
@@ -375,13 +378,29 @@ export default function WarehouseDashboard() {
         </div>
 
         {/* Last batch detailed view */}
-        {lastBatch && lastBatch.length > 0 && (
+        {lastBatch && lastBatch.length > 0 && !showChecklist && (
           <SubmittedDetailsPanel
             batch={lastBatch}
             setBatch={setLastBatch}
             api={API}
             authHeaders={authHeaders}
-            onAddMore={() => setLastBatch(null)}
+            onAddMore={() => {
+              setLastBatch(null);
+              setShowChecklist(false);
+            }}
+            onGoToChecklist={() => setShowChecklist(true)}
+          />
+        )}
+
+        {/* Checklist view */}
+        {lastBatch && lastBatch.length > 0 && showChecklist && (
+          <ChecklistView
+            batch={lastBatch}
+            onBack={() => setShowChecklist(false)}
+            onAddMore={() => {
+              setLastBatch(null);
+              setShowChecklist(false);
+            }}
           />
         )}
 
@@ -484,7 +503,7 @@ export default function WarehouseDashboard() {
 // ============================================================
 // SubmittedDetailsPanel — shown after submit, with edit/delete
 // ============================================================
-function SubmittedDetailsPanel({ batch, setBatch, api, authHeaders, onAddMore }) {
+function SubmittedDetailsPanel({ batch, setBatch, api, authHeaders, onAddMore, onGoToChecklist }) {
   const [invoiceEditing, setInvoiceEditing] = useState(null);
 
   const totals = batch.reduce(
@@ -555,13 +574,22 @@ function SubmittedDetailsPanel({ batch, setBatch, api, authHeaders, onAddMore })
             edit or delete before moving on.
           </div>
         </div>
-        <button
-          onClick={onAddMore}
-          data-testid="add-more-stock"
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800"
-        >
-          <Plus className="w-4 h-4" /> Add new stock
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onAddMore}
+            data-testid="add-more-stock"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-neutral-200 bg-white text-neutral-800 text-sm font-medium hover:bg-neutral-50"
+          >
+            <Plus className="w-4 h-4" /> Add new stock
+          </button>
+          <button
+            onClick={onGoToChecklist}
+            data-testid="open-checklist"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800"
+          >
+            <CheckSquare className="w-4 h-4" /> Go to check list
+          </button>
+        </div>
       </div>
 
       {/* Flat product table */}
@@ -699,13 +727,21 @@ function SubmittedDetailsPanel({ batch, setBatch, api, authHeaders, onAddMore })
         </div>
       </div>
 
-      <div className="flex justify-center">
+      <div className="flex justify-center gap-2">
         <button
           type="button"
           onClick={onAddMore}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-neutral-200 bg-white text-sm text-neutral-700 hover:bg-neutral-50"
         >
           <Plus className="w-4 h-4" /> Add new stock
+        </button>
+        <button
+          type="button"
+          onClick={onGoToChecklist}
+          data-testid="open-checklist-bottom"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800"
+        >
+          <CheckSquare className="w-4 h-4" /> Go to check list
         </button>
       </div>
 
