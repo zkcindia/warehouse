@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import EditInvoiceModal from "@/components/EditInvoiceModal";
 import ChecklistView from "@/components/ChecklistView";
+import CouriersStrip from "@/components/CouriersStrip";
 
 const MAX_IMG_BYTES = 4 * 1024 * 1024; // 4MB
 
@@ -376,6 +377,9 @@ export default function WarehouseDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Couriers from cashier */}
+        {!showChecklist && <CouriersStrip />}
 
         {/* Last batch detailed view */}
         {lastBatch && lastBatch.length > 0 && !showChecklist && (

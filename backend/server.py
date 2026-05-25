@@ -681,13 +681,13 @@ async def create_couriers_batch(body: CourierBatchCreate, user: dict = Depends(r
     return {"created": created, "count": len(created)}
 
 @api_router.get("/couriers", response_model=List[CourierOut])
-async def list_couriers(user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER))):
+async def list_couriers(user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER, ROLE_WAREHOUSE))):
     cursor = db.couriers.find({}, {'_id': 0}).sort('created_at', -1)
     docs = await cursor.to_list(1000)
     return [courier_doc_to_out(d) for d in docs]
 
 @api_router.delete("/couriers/{cid}")
-async def delete_courier(cid: str, user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER))):
+async def delete_courier(cid: str, user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER, ROLE_WAREHOUSE))):
     res = await db.couriers.delete_one({'id': cid})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Courier entry not found.")
@@ -706,7 +706,7 @@ class CourierPatch(BaseModel):
     products: Optional[List[ProductIn]] = None
 
 @api_router.patch("/couriers/{cid}", response_model=CourierOut)
-async def patch_courier(cid: str, body: CourierPatch, user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER))):
+async def patch_courier(cid: str, body: CourierPatch, user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER, ROLE_WAREHOUSE))):
     doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Courier entry not found.")
@@ -758,7 +758,7 @@ async def patch_courier(cid: str, body: CourierPatch, user: dict = Depends(requi
     return courier_doc_to_out(updated)
 
 @api_router.delete("/couriers/{cid}/products/{product_id}", response_model=CourierOut)
-async def delete_courier_product(cid: str, product_id: str, user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER))):
+async def delete_courier_product(cid: str, product_id: str, user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER, ROLE_WAREHOUSE))):
     doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Courier entry not found.")
