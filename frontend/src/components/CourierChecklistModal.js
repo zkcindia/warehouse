@@ -9,6 +9,8 @@ import {
   ClipboardCheck,
   Loader2,
   Truck,
+  ArrowRight,
+  Lock,
 } from "lucide-react";
 import {
   COURIER_CHECKLIST,
@@ -16,7 +18,7 @@ import {
   checklistProgress,
 } from "@/lib/checklist";
 
-export default function CourierChecklistModal({ courier, onClose, onUpdated }) {
+export default function CourierChecklistModal({ courier, onClose, onUpdated, onNext }) {
   const { API, authHeaders } = useAuth();
   const [state, setState] = useState(defaultChecklistState());
   const [saving, setSaving] = useState(false);
@@ -42,7 +44,7 @@ export default function CourierChecklistModal({ courier, onClose, onUpdated }) {
     onClose?.();
   };
 
-  const handleSave = async () => {
+  const handleSave = async ({ goNext = false } = {}) => {
     setSaving(true);
     try {
       const res = await axios.patch(
@@ -58,7 +60,11 @@ export default function CourierChecklistModal({ courier, onClose, onUpdated }) {
       );
       onUpdated?.(res.data);
       setDirty(false);
-      onClose?.();
+      if (goNext && p.complete) {
+        onNext?.(res.data);
+      } else {
+        onClose?.();
+      }
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Failed to save checklist");
     } finally {
@@ -175,12 +181,19 @@ export default function CourierChecklistModal({ courier, onClose, onUpdated }) {
 
         {/* Footer */}
         <div className="flex items-center justify-between gap-2 px-6 py-4 border-t border-neutral-100 bg-white">
-          <div className="text-[11px] text-neutral-400">
-            {progress.complete
-              ? "All steps complete"
-              : `${progress.total - progress.done} step${
-                  progress.total - progress.done === 1 ? "" : "s"
-                } remaining`}
+          <div className="text-[11px] text-neutral-400 flex items-center gap-1.5">
+            {progress.complete ? (
+              <span className="inline-flex items-center gap-1 text-emerald-700">
+                <CheckCircle2 className="w-3.5 h-3.5" /> All steps complete
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                <Lock className="w-3.5 h-3.5" />
+                {progress.total - progress.done} step
+                {progress.total - progress.done === 1 ? "" : "s"} remaining to
+                unlock next
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -192,21 +205,47 @@ export default function CourierChecklistModal({ courier, onClose, onUpdated }) {
             >
               Cancel
             </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !dirty}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800 disabled:opacity-60"
-              data-testid="checklist-save-btn"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> Saving…
-                </>
-              ) : (
-                <>Save checklist</>
-              )}
-            </button>
+            {!progress.complete ? (
+              <button
+                type="button"
+                onClick={() => handleSave({ goNext: false })}
+                disabled={saving || !dirty}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800 disabled:opacity-60"
+                data-testid="checklist-save-btn"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Saving…
+                  </>
+                ) : (
+                  <>Save checklist</>
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!dirty) {
+                    onNext?.(courier);
+                  } else {
+                    handleSave({ goNext: true });
+                  }
+                }}
+                disabled={saving}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-60"
+                data-testid="checklist-next-btn"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Saving…
+                  </>
+                ) : (
+                  <>
+                    Next: Add items <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
       </div>

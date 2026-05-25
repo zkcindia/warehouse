@@ -3,6 +3,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import CourierDetailsModal from "@/components/CourierDetailsModal";
 import CourierChecklistModal from "@/components/CourierChecklistModal";
+import CourierItemsModal from "@/components/CourierItemsModal";
 import { checklistProgress } from "@/lib/checklist";
 import {
   Truck,
@@ -15,6 +16,8 @@ import {
   Wallet,
   ChevronRight,
   ClipboardCheck,
+  PackagePlus,
+  Package,
 } from "lucide-react";
 
 function PaymentBadge({ paid, mode }) {
@@ -58,6 +61,7 @@ export default function CouriersStrip() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(null);
   const [checklistFor, setChecklistFor] = useState(null);
+  const [itemsFor, setItemsFor] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -162,25 +166,57 @@ export default function CouriersStrip() {
                     <PaymentBadge paid={c.payment_made} mode={c.payment_mode} />
                     <ChecklistBadge checklist={c.checklist} />
                   </div>
+
+                  {/* Items count (visible when checklist complete or items exist) */}
+                  {(cp.complete || (c.products && c.products.length > 0)) && (
+                    <div className="mt-2 inline-flex items-center gap-1 text-[11px] text-neutral-500">
+                      <Package className="w-3 h-3" />
+                      {(c.products && c.products.length) || 0} item
+                      {(c.products?.length || 0) === 1 ? "" : "s"} ·{" "}
+                      <span className="font-semibold text-neutral-700">
+                        {c.total_quantity || 0}
+                      </span>{" "}
+                      units
+                    </div>
+                  )}
                 </button>
 
-                {/* Checklist action button */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setChecklistFor(c);
-                  }}
-                  data-testid={`open-checklist-btn-${c.courier_number}`}
-                  className={`mt-3 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
-                    cp.complete
-                      ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                      : "bg-neutral-900 border-neutral-900 text-white hover:bg-neutral-800"
-                  }`}
-                >
-                  <ClipboardCheck className="w-4 h-4" />
-                  {cp.complete ? "Checklist complete" : "Open checklist"}
-                </button>
+                {/* Action buttons */}
+                <div className="mt-3 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setChecklistFor(c);
+                    }}
+                    data-testid={`open-checklist-btn-${c.courier_number}`}
+                    className={`inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                      cp.complete
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                        : "bg-neutral-900 border-neutral-900 text-white hover:bg-neutral-800"
+                    }`}
+                  >
+                    <ClipboardCheck className="w-4 h-4" />
+                    {cp.complete ? "Checklist complete" : "Open checklist"}
+                  </button>
+
+                  {cp.complete && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setItemsFor(c);
+                      }}
+                      data-testid={`add-items-btn-${c.courier_number}`}
+                      className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border bg-blue-600 border-blue-600 text-white hover:bg-blue-700"
+                    >
+                      <PackagePlus className="w-4 h-4" />
+                      {c.products && c.products.length > 0
+                        ? "Manage items"
+                        : "Add items"}
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -196,6 +232,16 @@ export default function CouriersStrip() {
       <CourierChecklistModal
         courier={checklistFor}
         onClose={() => setChecklistFor(null)}
+        onUpdated={applyUpdate}
+        onNext={(updated) => {
+          applyUpdate(updated);
+          setChecklistFor(null);
+          setItemsFor(updated);
+        }}
+      />
+      <CourierItemsModal
+        courier={itemsFor}
+        onClose={() => setItemsFor(null)}
         onUpdated={applyUpdate}
       />
     </div>

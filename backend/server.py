@@ -87,6 +87,9 @@ class ProductOut(BaseModel):
     id: str
     name: str
     quantity: int
+    photo: Optional[str] = None
+    damaged: bool = False
+    damaged_count: int = 0
     created_at: datetime
 
 class ParcelCreate(BaseModel):
@@ -301,6 +304,9 @@ def parcel_doc_to_out(doc: dict) -> dict:
             'id': p['id'],
             'name': p['name'],
             'quantity': p['quantity'],
+            'photo': p.get('photo'),
+            'damaged': bool(p.get('damaged', False)),
+            'damaged_count': int(p.get('damaged_count', 0)),
             'created_at': p_created,
         })
     total_qty = sum(p['quantity'] for p in products)
@@ -630,6 +636,9 @@ def courier_doc_to_out(doc: dict) -> dict:
             'id': p['id'],
             'name': p['name'],
             'quantity': p['quantity'],
+            'photo': p.get('photo'),
+            'damaged': bool(p.get('damaged', False)),
+            'damaged_count': int(p.get('damaged_count', 0)),
             'created_at': p_created,
         })
     total_qty = sum(p['quantity'] for p in products)
@@ -820,6 +829,109 @@ async def update_courier_checklist(
     )
     updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
     return courier_doc_to_out(updated)
+
+# --- Add item to a courier (only after checklist complete) ---
+class CourierItemAdd(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    quantity: int = Field(ge=1, le=1_000_000)
+    photo: Optional[str] = None  # base64 data url, optional
+    damaged: bool = False
+    damaged_count: int = Field(default=0, ge=0, le=1_000_000)
+
+@api_router.post("/couriers/{cid}/items", response_model=CourierOut, status_code=201)
+async def add_courier_item(
+    cid: str,
+    body: CourierItemAdd,
+    user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE, ROLE_VERIFICATION)),
+):
+    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Courier entry not found.")
+
+    checklist = _normalize_checklist(doc.get('checklist'))
+    if not all(checklist.get(k) for k in COURIER_CHECKLIST_KEYS):
+        raise HTTPException(
+            status_code=400,
+            detail="Complete the warehouse checklist before adding items.",
+        )
+
+    if body.photo and len(body.photo) > 6_000_000:
+        raise HTTPException(status_code=400, detail="Item photo is too large (max ~4MB).")
+
+    name_clean = body.name.strip()
+    if not name_clean:
+        raise HTTPException(status_code=400, detail="Item name is required.")
+
+    damaged_flag = bool(body.damaged) and body.damaged_count > 0
+    damaged_count = int(body.damaged_count) if damaged_flag else 0
+    if damaged_count > body.quantity:
+        raise HTTPException(
+            status_code=400,
+            detail="Damaged count cannot exceed the quantity being added.",
+        )
+
+    products = list(doc.get('products', []))
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # Auto-merge: find an existing item with same name (case-insensitive)
+    match_idx = next(
+        (i for i, p in enumerate(products) if (p.get('name') or '').strip().lower() == name_clean.lower()),
+        -1,
+    )
+
+    if match_idx >= 0:
+        existing = products[match_idx]
+        new_qty = int(existing.get('quantity', 0)) + int(body.quantity)
+        new_dmg = int(existing.get('damaged_count', 0)) + damaged_count
+        merged = {
+            **existing,
+            'name': name_clean,  # normalize name casing to latest
+            'quantity': new_qty,
+            'damaged': bool(existing.get('damaged', False) or damaged_flag or new_dmg > 0),
+            'damaged_count': new_dmg,
+            'photo': body.photo if body.photo else existing.get('photo'),
+            'updated_at': now_iso,
+        }
+        products[match_idx] = merged
+    else:
+        products.append({
+            'id': str(uuid.uuid4()),
+            'name': name_clean,
+            'quantity': int(body.quantity),
+            'photo': body.photo,
+            'damaged': damaged_flag,
+            'damaged_count': damaged_count,
+            'created_at': now_iso,
+        })
+
+    await db.couriers.update_one(
+        {'id': cid},
+        {'$set': {
+            'products': products,
+            'items_updated_at': now_iso,
+            'items_updated_by': user['full_name'],
+        }},
+    )
+    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    return courier_doc_to_out(updated)
+
+
+@api_router.delete("/couriers/{cid}/items/{item_id}", response_model=CourierOut)
+async def remove_courier_item(
+    cid: str,
+    item_id: str,
+    user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE, ROLE_VERIFICATION)),
+):
+    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Courier entry not found.")
+    products = [p for p in doc.get('products', []) if p.get('id') != item_id]
+    if len(products) == len(doc.get('products', [])):
+        raise HTTPException(status_code=404, detail="Item not found.")
+    await db.couriers.update_one({'id': cid}, {'$set': {'products': products}})
+    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    return courier_doc_to_out(updated)
+
 
 # Include the router in the main app
 app.include_router(api_router)

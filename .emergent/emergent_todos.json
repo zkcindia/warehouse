@@ -1,18 +1,22 @@
 [
   {
-    "content": "Backend: Add checklist field to courier model + PATCH endpoint",
+    "content": "Backend: Extend product schema (photo, damaged, damaged_count) + add POST /couriers/{cid}/items with auto-merge on same name",
     "status": "completed"
   },
   {
-    "content": "Frontend: Create CourierChecklistModal component with checkboxes",
+    "content": "Frontend: Add 'Next' button in checklist modal (enabled only when all 6 ticked)",
     "status": "completed"
   },
   {
-    "content": "Frontend: Add 'Checklist' button on each courier card with progress badge",
+    "content": "Frontend: Create CourierItemsModal — list existing items + add-item form with photo/name/qty/damaged",
     "status": "completed"
   },
   {
-    "content": "Test end-to-end (save, persist, reload)",
+    "content": "Frontend: Wire flow — checklist complete → Next → items modal; also accessible from card when checklist complete",
+    "status": "completed"
+  },
+  {
+    "content": "Test end-to-end flow",
     "status": "completed"
   }
 ]
