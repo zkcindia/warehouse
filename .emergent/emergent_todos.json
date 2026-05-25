@@ -1,18 +1,26 @@
 [
   {
-    "content": "Backend: Extend product schema with category, brand, code, description, price",
+    "content": "Backend: Add sent_to_data_entry flag + toggle endpoint",
     "status": "completed"
   },
   {
-    "content": "Backend: Add POST /api/couriers/{cid}/items/batch endpoint with auto-merge per row",
+    "content": "Backend: Extend product schema with purchase/finance fields (supplier, invoice, GST, HSN, etc.)",
     "status": "completed"
   },
   {
-    "content": "Frontend: Rebuild Add Item dialog as a multi-row table (one courier, many items)",
+    "content": "Backend: GET /api/data-entry/couriers (flagged only) + PATCH /api/couriers/{cid}/items/{item_id} update",
     "status": "completed"
   },
   {
-    "content": "Frontend: Show per-row 'already exists' indicator for auto-merge transparency",
+    "content": "Frontend: Add 'Send to Data Entry' button on Warehouse courier cards",
+    "status": "completed"
+  },
+  {
+    "content": "Frontend: Build DataEntryDashboard with flagged courier list + item edit modal",
+    "status": "completed"
+  },
+  {
+    "content": "Frontend: Wire route /dashboard/data-entry to new page",
     "status": "completed"
   },
   {

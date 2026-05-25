@@ -17,7 +17,10 @@ import {
   ChevronRight,
   ClipboardCheck,
   Package,
+  Send,
+  CheckCircle2,
 } from "lucide-react";
+import { toast } from "sonner";
 
 function PaymentBadge({ paid, mode }) {
   if (!paid) {
@@ -61,6 +64,7 @@ export default function CouriersStrip({ onCouriersChange }) {
   const [open, setOpen] = useState(null);
   const [checklistFor, setChecklistFor] = useState(null);
   const [itemsFor, setItemsFor] = useState(null);
+  const [sendingId, setSendingId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,6 +85,34 @@ export default function CouriersStrip({ onCouriersChange }) {
   const applyUpdate = (updated) => {
     setCouriers((arr) => arr.map((c) => (c.id === updated.id ? updated : c)));
     onCouriersChange?.();
+  };
+
+  const handleToggleDataEntry = async (c) => {
+    const sending = !c.sent_to_data_entry;
+    if (
+      c.sent_to_data_entry &&
+      !window.confirm(`Recall ${c.courier_number} from Data Entry?`)
+    ) {
+      return;
+    }
+    setSendingId(c.id);
+    try {
+      const res = await axios.patch(
+        `${API}/couriers/${c.id}/send-to-data-entry`,
+        { sent: sending },
+        { headers: authHeaders() }
+      );
+      toast.success(
+        sending
+          ? `${c.courier_number} sent to Data Entry`
+          : `${c.courier_number} recalled from Data Entry`
+      );
+      applyUpdate(res.data);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to update");
+    } finally {
+      setSendingId(null);
+    }
   };
 
   return (
@@ -182,8 +214,8 @@ export default function CouriersStrip({ onCouriersChange }) {
                   )}
                 </button>
 
-                {/* Action button (checklist only — items live in global Inventory tab) */}
-                <div className="mt-3">
+                {/* Action buttons */}
+                <div className="mt-3 space-y-2">
                   <button
                     type="button"
                     onClick={(e) => {
@@ -200,6 +232,35 @@ export default function CouriersStrip({ onCouriersChange }) {
                     <ClipboardCheck className="w-4 h-4" />
                     {cp.complete ? "Checklist complete" : "Open checklist"}
                   </button>
+
+                  {/* Send to Data Entry — only after items added */}
+                  {cp.complete && (c.products?.length || 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleDataEntry(c);
+                      }}
+                      disabled={sendingId === c.id}
+                      data-testid={`send-data-entry-btn-${c.courier_number}`}
+                      className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                        c.sent_to_data_entry
+                          ? "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+                          : "bg-blue-600 border-blue-600 text-white hover:bg-blue-700"
+                      } disabled:opacity-60`}
+                    >
+                      {sendingId === c.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : c.sent_to_data_entry ? (
+                        <CheckCircle2 className="w-4 h-4" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
+                      {c.sent_to_data_entry
+                        ? `Sent to Data Entry · ${c.data_entry_done_count || 0}/${c.products.length}`
+                        : "Send to Data Entry"}
+                    </button>
+                  )}
                 </div>
               </div>
             );

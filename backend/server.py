@@ -95,6 +95,20 @@ class ProductOut(BaseModel):
     code: Optional[str] = None
     description: Optional[str] = None
     price: Optional[float] = None
+    # Data Entry / purchase fields
+    supplier: Optional[str] = None
+    invoice_number: Optional[str] = None
+    invoice_date: Optional[str] = None
+    transportation_method: Optional[str] = None
+    transporter_name: Optional[str] = None
+    transportation_cost: Optional[float] = None
+    gst_percent: Optional[float] = None
+    total_invoice_amount: Optional[float] = None
+    cost_per_unit: Optional[float] = None
+    gst_amount: Optional[float] = None
+    hsn_code: Optional[str] = None
+    unit: Optional[str] = None
+    data_entry_done: bool = False
     created_at: datetime
 
 class ParcelCreate(BaseModel):
@@ -629,6 +643,8 @@ class CourierOut(BaseModel):
     payment_mode: Optional[str] = None
     total_quantity: int
     checklist: dict
+    sent_to_data_entry: bool = False
+    data_entry_done_count: int = 0
     created_at: datetime
     created_by_name: str
 
@@ -654,9 +670,23 @@ def courier_doc_to_out(doc: dict) -> dict:
             'code': p.get('code'),
             'description': p.get('description'),
             'price': float(p['price']) if p.get('price') is not None else None,
+            'supplier': p.get('supplier'),
+            'invoice_number': p.get('invoice_number'),
+            'invoice_date': p.get('invoice_date'),
+            'transportation_method': p.get('transportation_method'),
+            'transporter_name': p.get('transporter_name'),
+            'transportation_cost': float(p['transportation_cost']) if p.get('transportation_cost') is not None else None,
+            'gst_percent': float(p['gst_percent']) if p.get('gst_percent') is not None else None,
+            'total_invoice_amount': float(p['total_invoice_amount']) if p.get('total_invoice_amount') is not None else None,
+            'cost_per_unit': float(p['cost_per_unit']) if p.get('cost_per_unit') is not None else None,
+            'gst_amount': float(p['gst_amount']) if p.get('gst_amount') is not None else None,
+            'hsn_code': p.get('hsn_code'),
+            'unit': p.get('unit'),
+            'data_entry_done': bool(p.get('data_entry_done', False)),
             'created_at': p_created,
         })
     total_qty = sum(p['quantity'] for p in products)
+    data_entry_done_count = sum(1 for p in products if p.get('data_entry_done'))
     return {
         'id': doc['id'],
         'courier_number': doc['courier_number'],
@@ -672,6 +702,8 @@ def courier_doc_to_out(doc: dict) -> dict:
         'payment_mode': doc.get('payment_mode'),
         'total_quantity': total_qty,
         'checklist': _normalize_checklist(doc.get('checklist')),
+        'sent_to_data_entry': bool(doc.get('sent_to_data_entry', False)),
+        'data_entry_done_count': data_entry_done_count,
         'created_at': created_at,
         'created_by_name': doc.get('created_by_name', 'Cashier'),
     }
@@ -1007,6 +1039,111 @@ async def remove_courier_item(
     products = [p for p in doc.get('products', []) if p.get('id') != item_id]
     if len(products) == len(doc.get('products', [])):
         raise HTTPException(status_code=404, detail="Item not found.")
+    await db.couriers.update_one({'id': cid}, {'$set': {'products': products}})
+    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    return courier_doc_to_out(updated)
+
+
+# ============================================================
+# Data Entry workflow
+# ============================================================
+class SendToDataEntryBody(BaseModel):
+    sent: bool = True
+
+
+@api_router.patch("/couriers/{cid}/send-to-data-entry", response_model=CourierOut)
+async def send_courier_to_data_entry(
+    cid: str,
+    body: SendToDataEntryBody,
+    user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE)),
+):
+    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Courier entry not found.")
+    if body.sent and not doc.get('products'):
+        raise HTTPException(status_code=400, detail="Add at least one item before sending to Data Entry.")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    update = {
+        'sent_to_data_entry': bool(body.sent),
+        'sent_to_data_entry_at': now_iso if body.sent else None,
+        'sent_to_data_entry_by': user['full_name'] if body.sent else None,
+    }
+    await db.couriers.update_one({'id': cid}, {'$set': update})
+    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    return courier_doc_to_out(updated)
+
+
+@api_router.get("/data-entry/couriers", response_model=List[CourierOut])
+async def list_data_entry_couriers(
+    user: dict = Depends(require_role(ROLE_OWNER, ROLE_DATA_ENTRY)),
+):
+    cursor = db.couriers.find(
+        {'sent_to_data_entry': True}, {'_id': 0}
+    ).sort('sent_to_data_entry_at', -1)
+    docs = await cursor.to_list(1000)
+    return [courier_doc_to_out(d) for d in docs]
+
+
+class CourierItemDataEntry(BaseModel):
+    supplier: Optional[str] = Field(default=None, max_length=120)
+    invoice_number: Optional[str] = Field(default=None, max_length=80)
+    invoice_date: Optional[str] = Field(default=None, max_length=40)  # ISO date string (YYYY-MM-DD)
+    transportation_method: Optional[str] = Field(default=None, max_length=40)
+    transporter_name: Optional[str] = Field(default=None, max_length=120)
+    transportation_cost: Optional[float] = Field(default=None, ge=0)
+    gst_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    total_invoice_amount: Optional[float] = Field(default=None, ge=0)
+    cost_per_unit: Optional[float] = Field(default=None, ge=0)
+    gst_amount: Optional[float] = Field(default=None, ge=0)
+    hsn_code: Optional[str] = Field(default=None, max_length=40)
+    unit: Optional[str] = Field(default=None, max_length=20)
+    data_entry_done: Optional[bool] = None
+
+
+@api_router.patch("/couriers/{cid}/items/{item_id}/data-entry", response_model=CourierOut)
+async def update_item_data_entry(
+    cid: str,
+    item_id: str,
+    body: CourierItemDataEntry,
+    user: dict = Depends(require_role(ROLE_OWNER, ROLE_DATA_ENTRY)),
+):
+    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Courier entry not found.")
+    if not doc.get('sent_to_data_entry'):
+        raise HTTPException(
+            status_code=400,
+            detail="This courier has not been sent to Data Entry yet.",
+        )
+    products = list(doc.get('products', []))
+    idx = next((i for i, p in enumerate(products) if p.get('id') == item_id), -1)
+    if idx == -1:
+        raise HTTPException(status_code=404, detail="Item not found.")
+
+    update_fields = {}
+    for f in [
+        'supplier', 'invoice_number', 'invoice_date',
+        'transportation_method', 'transporter_name', 'hsn_code', 'unit',
+    ]:
+        v = getattr(body, f)
+        if v is not None:
+            update_fields[f] = (v.strip() if isinstance(v, str) else v) or None
+    for f in [
+        'transportation_cost', 'gst_percent', 'total_invoice_amount',
+        'cost_per_unit', 'gst_amount',
+    ]:
+        v = getattr(body, f)
+        if v is not None:
+            update_fields[f] = float(v)
+    if body.data_entry_done is not None:
+        update_fields['data_entry_done'] = bool(body.data_entry_done)
+
+    products[idx] = {
+        **products[idx],
+        **update_fields,
+        'data_entry_updated_at': datetime.now(timezone.utc).isoformat(),
+        'data_entry_updated_by': user['full_name'],
+    }
     await db.couriers.update_one({'id': cid}, {'$set': {'products': products}})
     updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
     return courier_doc_to_out(updated)

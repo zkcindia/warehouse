@@ -8,6 +8,7 @@ import LoginPage from "@/pages/LoginPage";
 import OwnerDashboard from "@/pages/OwnerDashboard";
 import WarehouseDashboard from "@/pages/WarehouseDashboard";
 import CashierDashboard from "@/pages/CashierDashboard";
+import DataEntryDashboard from "@/pages/DataEntryDashboard";
 import StaffDashboard from "@/pages/StaffDashboard";
 
 function ProtectedRoute({ children, allowedRoles }) {
@@ -80,7 +81,7 @@ function App() {
               path="/dashboard/data-entry"
               element={
                 <ProtectedRoute allowedRoles={["data_entry"]}>
-                  <StaffDashboard />
+                  <DataEntryDashboard />
                 </ProtectedRoute>
               }
             />
