@@ -60,6 +60,14 @@ function App() {
               }
             />
             <Route
+              path="/dashboard/cashier"
+              element={
+                <ProtectedRoute allowedRoles={["cashier"]}>
+                  <StaffDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/dashboard/warehouse"
               element={
                 <ProtectedRoute allowedRoles={["warehouse"]}>

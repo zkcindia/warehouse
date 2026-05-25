@@ -29,14 +29,16 @@ JWT_EXP_HOURS = 24 * 7  # 7 days
 
 # Roles
 ROLE_OWNER = 'owner'
+ROLE_CASHIER = 'cashier'
 ROLE_WAREHOUSE = 'warehouse'
 ROLE_DATA_ENTRY = 'data_entry'
 ROLE_VERIFICATION = 'verification'
-VALID_ROLES = [ROLE_OWNER, ROLE_WAREHOUSE, ROLE_DATA_ENTRY, ROLE_VERIFICATION]
-STAFF_ROLES = [ROLE_WAREHOUSE, ROLE_DATA_ENTRY, ROLE_VERIFICATION]
+VALID_ROLES = [ROLE_OWNER, ROLE_CASHIER, ROLE_WAREHOUSE, ROLE_DATA_ENTRY, ROLE_VERIFICATION]
+STAFF_ROLES = [ROLE_CASHIER, ROLE_WAREHOUSE, ROLE_DATA_ENTRY, ROLE_VERIFICATION]
 
 ROLE_LABELS = {
     ROLE_OWNER: 'Owner',
+    ROLE_CASHIER: 'Cashier',
     ROLE_WAREHOUSE: 'Warehouse Staff',
     ROLE_DATA_ENTRY: 'Data Entry Staff',
     ROLE_VERIFICATION: 'Verification Staff',
@@ -64,7 +66,7 @@ class UserPublic(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
-    role: Literal['owner', 'warehouse', 'data_entry', 'verification']
+    role: Literal['owner', 'cashier', 'warehouse', 'data_entry', 'verification']
 
 class LoginResponse(BaseModel):
     token: str
@@ -74,7 +76,7 @@ class CreateStaffRequest(BaseModel):
     email: EmailStr
     full_name: str = Field(min_length=2, max_length=80)
     password: str = Field(min_length=6, max_length=100)
-    role: Literal['warehouse', 'data_entry', 'verification']
+    role: Literal['cashier', 'warehouse', 'data_entry', 'verification']
 
 # ----- Parcel / Product models -----
 class ProductIn(BaseModel):
@@ -198,6 +200,7 @@ async def on_startup():
     # Seed demo accounts for ALL roles
     demo_accounts = [
         {'email': 'owner@warehouse.com',        'password': 'Owner@123',       'full_name': 'Demo Owner',             'role': ROLE_OWNER},
+        {'email': 'cashier@warehouse.com',      'password': 'Cashier@123',     'full_name': 'Demo Cashier',           'role': ROLE_CASHIER},
         {'email': 'warehouse@warehouse.com',    'password': 'Warehouse@123',   'full_name': 'Demo Warehouse Staff',   'role': ROLE_WAREHOUSE},
         {'email': 'dataentry@warehouse.com',    'password': 'DataEntry@123',   'full_name': 'Demo Data Entry Staff',  'role': ROLE_DATA_ENTRY},
         {'email': 'verification@warehouse.com', 'password': 'Verify@123',      'full_name': 'Demo Verification Staff','role': ROLE_VERIFICATION},

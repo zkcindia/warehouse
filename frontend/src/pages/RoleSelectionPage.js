@@ -37,7 +37,7 @@ export default function RoleSelectionPage() {
           </p>
         </div>
 
-        <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 w-full max-w-6xl fade-in">
+        <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 w-full max-w-7xl fade-in">
           {ROLES.map((r) => {
             const Icon = r.icon;
             return (

@@ -1,4 +1,4 @@
-import { Crown, Warehouse, ClipboardEdit, ShieldCheck } from "lucide-react";
+import { Crown, IndianRupee, Warehouse, ClipboardEdit, ShieldCheck } from "lucide-react";
 
 export const ROLES = [
   {
@@ -10,6 +10,16 @@ export const ROLES = [
     accent: "bg-neutral-900 text-white",
     demoEmail: "owner@warehouse.com",
     demoPassword: "Owner@123",
+  },
+  {
+    key: "cashier",
+    slug: "cashier",
+    label: "Cashier",
+    description: "Handle billing, payments and daily cash flow.",
+    icon: IndianRupee,
+    accent: "bg-purple-600 text-white",
+    demoEmail: "cashier@warehouse.com",
+    demoPassword: "Cashier@123",
   },
   {
     key: "warehouse",
