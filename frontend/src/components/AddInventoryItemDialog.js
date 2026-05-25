@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
@@ -13,9 +13,18 @@ import {
   Truck,
   CheckCircle2,
   Lock,
+  ArrowRight,
 } from "lucide-react";
 
 const MAX_IMG_BYTES = 4 * 1024 * 1024;
+const CHECKLIST_KEYS = [
+  "master_carton",
+  "label_check",
+  "bills_check",
+  "quantity_verify",
+  "damage_check",
+  "photo_taken",
+];
 
 function fileToDataURL(file) {
   return new Promise((res, rej) => {
@@ -30,18 +39,14 @@ export default function AddInventoryItemDialog({ open, couriers, onClose, onAdde
   const { API, authHeaders } = useAuth();
   const fileRef = useRef(null);
 
-  const eligible = (couriers || []).filter((c) => {
-    const chk = c.checklist || {};
-    const keys = [
-      "master_carton",
-      "label_check",
-      "bills_check",
-      "quantity_verify",
-      "damage_check",
-      "photo_taken",
-    ];
-    return keys.every((k) => !!chk[k]);
-  });
+  const eligible = useMemo(
+    () =>
+      (couriers || []).filter((c) => {
+        const chk = c.checklist || {};
+        return CHECKLIST_KEYS.every((k) => !!chk[k]);
+      }),
+    [couriers]
+  );
 
   const [courierId, setCourierId] = useState("");
   const [name, setName] = useState("");
@@ -50,10 +55,12 @@ export default function AddInventoryItemDialog({ open, couriers, onClose, onAdde
   const [damaged, setDamaged] = useState(false);
   const [damagedCount, setDamagedCount] = useState("");
   const [saving, setSaving] = useState(false);
+  const [userPickedCourier, setUserPickedCourier] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setCourierId(eligible[0]?.id || "");
+    setUserPickedCourier(false);
     setName("");
     setQuantity("");
     setPhoto(null);
@@ -63,9 +70,34 @@ export default function AddInventoryItemDialog({ open, couriers, onClose, onAdde
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const selectedCourier = eligible.find((c) => c.id === courierId) || null;
+  // Find all global matches across eligible couriers (case-insensitive trim match)
+  const globalMatches = useMemo(() => {
+    const n = name.trim().toLowerCase();
+    if (!n) return [];
+    const arr = [];
+    eligible.forEach((c) => {
+      (c.products || []).forEach((p) => {
+        if ((p.name || "").trim().toLowerCase() === n) {
+          arr.push({ courier: c, product: p });
+        }
+      });
+    });
+    return arr;
+  }, [name, eligible]);
 
-  const existingMatch = (() => {
+  // Auto-select the existing courier when a match is found (unless user explicitly picked)
+  useEffect(() => {
+    if (!open) return;
+    if (userPickedCourier) return;
+    if (globalMatches.length > 0) {
+      const m = globalMatches[0];
+      if (m.courier.id !== courierId) setCourierId(m.courier.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalMatches, open]);
+
+  const selectedCourier = eligible.find((c) => c.id === courierId) || null;
+  const existingInSelected = useMemo(() => {
     if (!selectedCourier) return null;
     const n = name.trim().toLowerCase();
     if (!n) return null;
@@ -74,7 +106,18 @@ export default function AddInventoryItemDialog({ open, couriers, onClose, onAdde
         (p) => (p.name || "").trim().toLowerCase() === n
       ) || null
     );
-  })();
+  }, [name, selectedCourier]);
+
+  // Total existing stock across DB for this name
+  const dbAggregate = useMemo(() => {
+    let qty = 0;
+    let dmg = 0;
+    globalMatches.forEach(({ product }) => {
+      qty += Number(product.quantity || 0);
+      dmg += Number(product.damaged_count || 0);
+    });
+    return { qty, dmg, count: globalMatches.length };
+  }, [globalMatches]);
 
   if (!open) return null;
 
@@ -120,8 +163,8 @@ export default function AddInventoryItemDialog({ open, couriers, onClose, onAdde
         { headers: authHeaders() }
       );
       toast.success(
-        existingMatch
-          ? `${cleanName} merged into existing stock`
+        existingInSelected
+          ? `${cleanName} merged — stock added to existing (${selectedCourier?.courier_number})`
           : `${cleanName} added to ${selectedCourier?.courier_number}`
       );
       onAdded?.(res.data);
@@ -132,6 +175,12 @@ export default function AddInventoryItemDialog({ open, couriers, onClose, onAdde
       setSaving(false);
     }
   };
+
+  // Total once added
+  const previewTotal = (() => {
+    if (!existingInSelected) return Number(quantity || 0);
+    return Number(existingInSelected.quantity || 0) + Number(quantity || 0);
+  })();
 
   return (
     <div
@@ -165,6 +214,55 @@ export default function AddInventoryItemDialog({ open, couriers, onClose, onAdde
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          {/* Existing-name match notice (auto-detected) */}
+          {globalMatches.length > 0 && (
+            <div
+              className="p-3 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 text-sm"
+              data-testid="inv-existing-match-notice"
+            >
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 mt-0.5 text-blue-600 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium">
+                    "{globalMatches[0].product.name}" already exists in stock
+                  </div>
+                  <div className="text-[12px] text-blue-700/90 mt-0.5">
+                    Present stock:{" "}
+                    <span className="font-semibold">{dbAggregate.qty}</span> units
+                    {dbAggregate.dmg > 0 && (
+                      <>
+                        {" "}·{" "}
+                        <span className="text-red-700">{dbAggregate.dmg} damaged</span>
+                      </>
+                    )}
+                    {dbAggregate.count > 1 && (
+                      <> · in {dbAggregate.count} couriers</>
+                    )}
+                    . New quantity will be merged into the selected courier's existing stock.
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {globalMatches.map((m) => (
+                      <span
+                        key={m.product.id}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-white border border-blue-200 text-blue-800"
+                      >
+                        <Truck className="w-3 h-3" />
+                        {m.courier.courier_number} · {m.product.quantity}
+                      </span>
+                    ))}
+                  </div>
+                  {quantity && Number(quantity) > 0 && existingInSelected && (
+                    <div className="mt-2 text-[12px] flex items-center gap-1.5 font-medium text-emerald-700">
+                      Calculation: {existingInSelected.quantity}{" "}
+                      <ArrowRight className="w-3 h-3" /> {previewTotal}{" "}
+                      (after adding {Number(quantity)})
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Courier selector */}
           <div>
             <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
@@ -184,7 +282,10 @@ export default function AddInventoryItemDialog({ open, couriers, onClose, onAdde
             ) : (
               <select
                 value={courierId}
-                onChange={(e) => setCourierId(e.target.value)}
+                onChange={(e) => {
+                  setCourierId(e.target.value);
+                  setUserPickedCourier(true);
+                }}
                 data-testid="inv-courier-select"
                 className="mt-1 w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-neutral-900"
               >
@@ -197,33 +298,6 @@ export default function AddInventoryItemDialog({ open, couriers, onClose, onAdde
               </select>
             )}
           </div>
-
-          {existingMatch && (
-            <div
-              className="p-3 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 text-sm flex items-start gap-3"
-              data-testid="inv-existing-match-notice"
-            >
-              <CheckCircle2 className="w-5 h-5 mt-0.5 text-blue-600 shrink-0" />
-              <div className="min-w-0">
-                <div className="font-medium">
-                  "{existingMatch.name}" already in {selectedCourier?.courier_number}
-                </div>
-                <div className="text-[12px] text-blue-700/90 mt-0.5">
-                  Present stock:{" "}
-                  <span className="font-semibold">{existingMatch.quantity}</span>
-                  {existingMatch.damaged_count > 0 && (
-                    <>
-                      {" "}·{" "}
-                      <span className="text-red-700">
-                        {existingMatch.damaged_count} damaged
-                      </span>
-                    </>
-                  )}
-                  . Quantity below will be merged into existing stock.
-                </div>
-              </div>
-            </div>
-          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Photo */}
@@ -284,8 +358,14 @@ export default function AddInventoryItemDialog({ open, couriers, onClose, onAdde
                 className="mt-1 w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
               />
               <datalist id="inv-existing-item-names">
-                {(selectedCourier?.products || []).map((p) => (
-                  <option key={p.id} value={p.name} />
+                {Array.from(
+                  new Set(
+                    eligible.flatMap((c) =>
+                      (c.products || []).map((p) => p.name)
+                    )
+                  )
+                ).map((n) => (
+                  <option key={n} value={n} />
                 ))}
               </datalist>
             </div>
@@ -293,7 +373,7 @@ export default function AddInventoryItemDialog({ open, couriers, onClose, onAdde
             {/* Quantity */}
             <div>
               <label className="text-xs font-medium text-neutral-600">
-                Quantity {existingMatch ? "(to add to existing)" : ""}
+                Quantity {existingInSelected ? "(to add to existing)" : ""}
               </label>
               <input
                 type="number"
@@ -388,7 +468,7 @@ export default function AddInventoryItemDialog({ open, couriers, onClose, onAdde
             ) : (
               <>
                 <Plus className="w-4 h-4" />
-                {existingMatch ? "Add to existing" : "Add item"}
+                {existingInSelected ? "Add to existing" : "Add item"}
               </>
             )}
           </button>

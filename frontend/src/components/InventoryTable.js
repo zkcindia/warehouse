@@ -2,12 +2,10 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
-import AddInventoryItemDialog from "@/components/AddInventoryItemDialog";
 import {
   Package,
   Loader2,
   RefreshCw,
-  Plus,
   Trash2,
   Image as ImageIcon,
   AlertTriangle,
@@ -36,24 +34,20 @@ function StatTile({ icon: Icon, label, value, accent = "neutral" }) {
   );
 }
 
-export default function InventoryTable() {
+export default function InventoryTable({ refreshNonce = 0 }) {
   const { API, authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
-  const [couriers, setCouriers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
   const [removingId, setRemovingId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [r1, r2] = await Promise.all([
-        axios.get(`${API}/inventory/items`, { headers: authHeaders() }),
-        axios.get(`${API}/couriers`, { headers: authHeaders() }),
-      ]);
-      setRows(r1.data || []);
-      setCouriers(r2.data || []);
+      const res = await axios.get(`${API}/inventory/items`, {
+        headers: authHeaders(),
+      });
+      setRows(res.data || []);
     } catch (e) {
       toast.error("Failed to load inventory");
     } finally {
@@ -63,7 +57,7 @@ export default function InventoryTable() {
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, refreshNonce]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -93,7 +87,6 @@ export default function InventoryTable() {
         { headers: authHeaders() }
       );
       toast.success("Item removed");
-      // Optimistic remove
       setRows((arr) => arr.filter((r) => r.item_id !== row.item_id));
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Failed to remove");
@@ -111,9 +104,9 @@ export default function InventoryTable() {
             <Boxes className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-base font-semibold text-neutral-900">Inventory</div>
+            <div className="text-base font-semibold text-neutral-900">Global inventory</div>
             <div className="text-xs text-neutral-500">
-              All items across all couriers · per-courier view
+              All items across all couriers
             </div>
           </div>
         </div>
@@ -136,14 +129,6 @@ export default function InventoryTable() {
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
-          </button>
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-900 text-white text-xs font-medium hover:bg-neutral-800"
-            data-testid="inv-add-btn"
-          >
-            <Plus className="w-3.5 h-3.5" /> Add item
           </button>
         </div>
       </div>
@@ -172,7 +157,7 @@ export default function InventoryTable() {
           <div className="text-xs text-neutral-400 mt-1">
             {search
               ? "Try a different search term"
-              : "Complete a courier checklist and add items to populate the inventory."}
+              : "Complete a courier checklist and use the Add Item button above."}
           </div>
         </div>
       ) : (
@@ -266,13 +251,6 @@ export default function InventoryTable() {
           </div>
         </div>
       )}
-
-      <AddInventoryItemDialog
-        open={addOpen}
-        couriers={couriers}
-        onClose={() => setAddOpen(false)}
-        onAdded={() => load()}
-      />
     </div>
   );
 }

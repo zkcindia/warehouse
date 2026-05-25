@@ -1,18 +1,14 @@
 [
   {
-    "content": "Backend: Add GET /api/inventory/items endpoint returning flat list of all items across couriers",
+    "content": "Restructure Warehouse dashboard: remove tabs, flat layout (cards → Add Item CTA → global table)",
     "status": "completed"
   },
   {
-    "content": "Frontend: Add tabs (Couriers | Inventory) to Warehouse dashboard; remove 'Manage items' button from courier cards",
+    "content": "Add Item dialog: cross-courier name match — auto-select existing courier + show present stock",
     "status": "completed"
   },
   {
-    "content": "Frontend: Build InventoryTable component with photo/name/qty/damaged/courier columns + delete action",
-    "status": "completed"
-  },
-  {
-    "content": "Frontend: 'Add Item' dialog that includes courier selector + reuses item form (auto-merge logic intact)",
+    "content": "Gate Add Item button: enabled only when at least one courier has complete checklist",
     "status": "completed"
   },
   {

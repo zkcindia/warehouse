@@ -54,7 +54,7 @@ function ChecklistBadge({ checklist }) {
   );
 }
 
-export default function CouriersStrip() {
+export default function CouriersStrip({ onCouriersChange }) {
   const { API, authHeaders } = useAuth();
   const [couriers, setCouriers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -67,19 +67,22 @@ export default function CouriersStrip() {
     try {
       const res = await axios.get(`${API}/couriers`, { headers: authHeaders() });
       setCouriers(res.data || []);
+      onCouriersChange?.();
     } catch (e) {
       // silent
     } finally {
       setLoading(false);
     }
-  }, [API, authHeaders]);
+  }, [API, authHeaders, onCouriersChange]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const applyUpdate = (updated) =>
+  const applyUpdate = (updated) => {
     setCouriers((arr) => arr.map((c) => (c.id === updated.id ? updated : c)));
+    onCouriersChange?.();
+  };
 
   return (
     <div className="bg-white border border-neutral-200 rounded-2xl p-5 mb-5">
