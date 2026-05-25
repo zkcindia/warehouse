@@ -10,13 +10,35 @@ import {
   CircleAlert,
   Package,
   Boxes,
+  Smartphone,
+  CreditCard,
+  Wallet,
+  UserRound,
+  ChevronRight,
 } from "lucide-react";
+
+function PaymentBadge({ paid, mode }) {
+  if (!paid) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+        <CircleAlert className="w-3 h-3" /> Unpaid
+      </span>
+    );
+  }
+  const Icon = mode === "upi" ? Smartphone : mode === "card" ? CreditCard : Wallet;
+  const label = mode === "upi" ? "UPI" : mode === "card" ? "Card" : "Cash";
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+      <CircleCheck className="w-3 h-3" /> Paid · <Icon className="w-3 h-3" /> {label}
+    </span>
+  );
+}
 
 export default function CouriersStrip() {
   const { API, authHeaders } = useAuth();
   const [couriers, setCouriers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(null); // courier object when modal open
+  const [open, setOpen] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -35,23 +57,23 @@ export default function CouriersStrip() {
   }, [load]);
 
   return (
-    <div className="bg-white border border-neutral-200 rounded-2xl p-4 mb-5">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md bg-purple-600 text-white flex items-center justify-center">
-            <Truck className="w-4 h-4" />
+    <div className="bg-white border border-neutral-200 rounded-2xl p-5 mb-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-lg bg-purple-600 text-white flex items-center justify-center">
+            <Truck className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-sm font-semibold text-neutral-900">Couriers from cashier</div>
-            <div className="text-[11px] text-neutral-500">
-              Click an ID to view details, edit or delete.
+            <div className="text-base font-semibold text-neutral-900">Couriers from cashier</div>
+            <div className="text-xs text-neutral-500">
+              Click a card to view all product details, edit or delete.
             </div>
           </div>
         </div>
         <button
           type="button"
           onClick={load}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50"
           title="Refresh"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -60,46 +82,90 @@ export default function CouriersStrip() {
       </div>
 
       {loading ? (
-        <div className="py-4 flex items-center justify-center text-neutral-400 text-xs gap-2">
+        <div className="py-6 flex items-center justify-center text-neutral-400 text-sm gap-2">
           <Loader2 className="w-4 h-4 animate-spin" /> Loading couriers…
         </div>
       ) : couriers.length === 0 ? (
-        <div className="py-4 text-center text-xs text-neutral-400 border border-dashed border-neutral-200 rounded-xl">
-          No couriers logged by Cashier yet.
+        <div className="py-8 text-center border border-dashed border-neutral-200 rounded-xl">
+          <div className="w-10 h-10 rounded-lg bg-neutral-100 text-neutral-400 mx-auto flex items-center justify-center mb-2">
+            <Truck className="w-5 h-5" />
+          </div>
+          <div className="text-sm text-neutral-600 font-medium">No couriers yet</div>
+          <div className="text-xs text-neutral-400 mt-0.5">
+            When Cashier logs a courier, it will show here.
+          </div>
         </div>
       ) : (
-        <div className="flex flex-wrap gap-2">
-          {couriers.map((c) => {
-            const paid = c.payment_made;
-            return (
-              <button
-                key={c.id}
-                type="button"
-                data-testid={`courier-pill-${c.courier_number}`}
-                onClick={() => setOpen(c)}
-                className="group flex items-center gap-2 px-3 py-2 rounded-xl border border-neutral-200 bg-white hover:border-neutral-900 hover:shadow-sm transition-all text-left"
-                title={`${c.courier_number} · ${c.products.length} items · ${c.total_quantity} units`}
-              >
-                <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-neutral-900 text-white text-[10px] font-mono">
-                  {c.courier_number.replace("CRX-", "")}
-                </span>
-                <span className="flex flex-col leading-tight">
-                  <span className="text-xs font-semibold text-neutral-900 font-mono">
-                    {c.courier_number}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {couriers.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              data-testid={`courier-pill-${c.courier_number}`}
+              onClick={() => setOpen(c)}
+              className="group text-left bg-white border border-neutral-200 rounded-xl p-4 hover:border-neutral-900 hover:shadow-md transition-all"
+            >
+              {/* Header row */}
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-neutral-900 text-white text-xs font-bold font-mono">
+                    {c.courier_number.replace("CRX-", "")}
                   </span>
-                  <span className="text-[10px] text-neutral-500 flex items-center gap-1.5">
-                    <Package className="w-3 h-3" /> {c.num_packages}
-                    <Boxes className="w-3 h-3 ml-1" /> {c.total_quantity}
-                    {paid ? (
-                      <CircleCheck className="w-3 h-3 text-emerald-600 ml-1" />
-                    ) : (
-                      <CircleAlert className="w-3 h-3 text-amber-600 ml-1" />
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-neutral-900 font-mono leading-tight">
+                      {c.courier_number}
+                    </div>
+                    {c.courier_company && (
+                      <div className="text-[11px] text-neutral-500 truncate flex items-center gap-1">
+                        <Truck className="w-3 h-3" /> {c.courier_company}
+                      </div>
                     )}
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-neutral-300 group-hover:text-neutral-900 transition-colors" />
+              </div>
+
+              {/* Products list */}
+              <div className="space-y-1 mb-3">
+                <div className="text-[10px] uppercase tracking-wider text-neutral-400 font-medium">
+                  Products ({c.products.length})
+                </div>
+                <ul className="space-y-0.5">
+                  {c.products.slice(0, 3).map((p) => (
+                    <li key={p.id} className="flex items-center justify-between text-xs">
+                      <span className="text-neutral-800 truncate font-medium">{p.name}</span>
+                      <span className="text-neutral-500 font-semibold tabular-nums ml-2">
+                        ×{p.quantity}
+                      </span>
+                    </li>
+                  ))}
+                  {c.products.length > 3 && (
+                    <li className="text-[11px] text-neutral-400">
+                      + {c.products.length - 3} more…
+                    </li>
+                  )}
+                </ul>
+              </div>
+
+              {/* Footer chips */}
+              <div className="pt-3 border-t border-neutral-100 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 text-[11px] text-neutral-500">
+                  <span className="inline-flex items-center gap-1">
+                    <Package className="w-3 h-3" /> {c.num_packages} pkgs
                   </span>
-                </span>
-              </button>
-            );
-          })}
+                  <span className="inline-flex items-center gap-1">
+                    <Boxes className="w-3 h-3" /> {c.total_quantity} units
+                  </span>
+                  {c.handled_by && (
+                    <span className="inline-flex items-center gap-1 truncate max-w-[120px]">
+                      <UserRound className="w-3 h-3" /> {c.handled_by}
+                    </span>
+                  )}
+                </div>
+                <PaymentBadge paid={c.payment_made} mode={c.payment_mode} />
+              </div>
+            </button>
+          ))}
         </div>
       )}
 
