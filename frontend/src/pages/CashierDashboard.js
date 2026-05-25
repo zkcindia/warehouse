@@ -18,9 +18,6 @@ import {
   X,
   RefreshCw,
   Building2,
-  IndianRupee,
-  Hash,
-  UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -45,10 +42,7 @@ const PAYMENT_OPTIONS = [
 const emptyEntry = () => ({
   uid: Math.random().toString(36).slice(2),
   courier_company: "",
-  tracking_number: "",
-  receiver_name: "",
   num_packages: "",
-  charges: "",
   photo: null,
   products: [{ name: "", quantity: "" }],
   payment_mode: "none",
@@ -95,7 +89,6 @@ function CourierEntryCard({ entry, index, total, onChange, onRemove }) {
             <div className="text-[11px] text-neutral-500">
               {filledProducts} item{filledProducts === 1 ? "" : "s"} · {totalUnits} units
               {entry.num_packages ? ` · ${entry.num_packages} pkgs` : ""}
-              {entry.tracking_number ? ` · ${entry.tracking_number}` : ""}
             </div>
           </div>
         </div>
@@ -125,30 +118,6 @@ function CourierEntryCard({ entry, index, total, onChange, onRemove }) {
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
-              <Hash className="w-3.5 h-3.5" /> Tracking / AWB number <span className="text-neutral-400 font-normal">(optional)</span>
-            </label>
-            <input
-              data-testid={`courier-tracking-${index}`}
-              value={entry.tracking_number}
-              onChange={(e) => update({ tracking_number: e.target.value })}
-              placeholder="e.g. 1234567890"
-              className="mt-1 w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
-              <UserRound className="w-3.5 h-3.5" /> Receiver name <span className="text-neutral-400 font-normal">(optional)</span>
-            </label>
-            <input
-              data-testid={`courier-receiver-${index}`}
-              value={entry.receiver_name}
-              onChange={(e) => update({ receiver_name: e.target.value })}
-              placeholder="e.g. Rohit Sharma"
-              className="mt-1 w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
-            />
-          </div>
-          <div>
             <label className="text-xs font-medium text-neutral-600">Number of packages</label>
             <input
               data-testid={`courier-packages-${index}`}
@@ -157,21 +126,6 @@ function CourierEntryCard({ entry, index, total, onChange, onRemove }) {
               value={entry.num_packages}
               onChange={(e) => update({ num_packages: e.target.value })}
               placeholder="e.g. 3"
-              className="mt-1 w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
-              <IndianRupee className="w-3.5 h-3.5" /> Courier charges <span className="text-neutral-400 font-normal">(optional)</span>
-            </label>
-            <input
-              data-testid={`courier-charges-${index}`}
-              type="number"
-              min="0"
-              step="0.01"
-              value={entry.charges}
-              onChange={(e) => update({ charges: e.target.value })}
-              placeholder="0.00"
               className="mt-1 w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
             />
           </div>
@@ -264,7 +218,7 @@ function CourierEntryCard({ entry, index, total, onChange, onRemove }) {
 
         {/* Payment mode */}
         <div>
-          <div className="text-xs font-medium text-neutral-600 mb-2">Payment mode for charges</div>
+          <div className="text-xs font-medium text-neutral-600 mb-2">Payment mode</div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {PAYMENT_OPTIONS.map((m) => {
               const active = entry.payment_mode === m.key;
@@ -309,10 +263,9 @@ export default function CashierDashboard() {
         packages: acc.packages + (Number(e.num_packages) || 0),
         units: acc.units + units,
         items: acc.items + items,
-        charges: acc.charges + (Number(e.charges) || 0),
       };
     },
-    { packages: 0, units: 0, items: 0, charges: 0 }
+    { packages: 0, units: 0, items: 0 }
   );
 
   const updateEntry = (idx, ne) =>
@@ -352,10 +305,7 @@ export default function CashierDashboard() {
             .filter((p) => p.name && p.quantity > 0);
           return {
             courier_company: en.courier_company.trim() || null,
-            tracking_number: en.tracking_number.trim() || null,
-            receiver_name: en.receiver_name.trim() || null,
             num_packages: Number(en.num_packages),
-            charges: en.charges === "" ? null : Number(en.charges),
             slip_photo: en.photo || null,
             products: cleanProducts,
             payment_made: isPaid,
@@ -412,7 +362,6 @@ export default function CashierDashboard() {
                       {c.products.map((p) => `${p.name} (${p.quantity})`).join(", ")} ·{" "}
                       {c.num_packages} pkgs
                       {c.courier_company ? ` · ${c.courier_company}` : ""}
-                      {c.tracking_number ? ` · ${c.tracking_number}` : ""}
                     </li>
                   ))}
                 </ul>
@@ -439,11 +388,6 @@ export default function CashierDashboard() {
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-neutral-200 text-neutral-700">
               <Building2 className="w-3.5 h-3.5" /> {totals.items} items · {totals.units} units
             </span>
-            {totals.charges > 0 && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-neutral-200 text-neutral-700">
-                <IndianRupee className="w-3.5 h-3.5" /> {totals.charges.toFixed(2)} total charges
-              </span>
-            )}
           </div>
 
           {entries.map((e, idx) => (
@@ -487,12 +431,6 @@ export default function CashierDashboard() {
               <div className="text-xs text-neutral-500">
                 Submitting <span className="font-semibold text-neutral-800">{entries.length}</span> courier{entries.length === 1 ? "" : "s"} ·{" "}
                 <span className="font-semibold text-neutral-800">{totals.units}</span> units
-                {totals.charges > 0 && (
-                  <>
-                    {" · ₹"}
-                    <span className="font-semibold text-neutral-800">{totals.charges.toFixed(2)}</span> charges
-                  </>
-                )}
               </div>
               <div className="flex items-center gap-2">
                 <button
