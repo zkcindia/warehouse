@@ -1,14 +1,18 @@
 [
   {
-    "content": "Restructure Warehouse dashboard: remove tabs, flat layout (cards → Add Item CTA → global table)",
+    "content": "Backend: Extend product schema with category, brand, code, description, price",
     "status": "completed"
   },
   {
-    "content": "Add Item dialog: cross-courier name match — auto-select existing courier + show present stock",
+    "content": "Backend: Add POST /api/couriers/{cid}/items/batch endpoint with auto-merge per row",
     "status": "completed"
   },
   {
-    "content": "Gate Add Item button: enabled only when at least one courier has complete checklist",
+    "content": "Frontend: Rebuild Add Item dialog as a multi-row table (one courier, many items)",
+    "status": "completed"
+  },
+  {
+    "content": "Frontend: Show per-row 'already exists' indicator for auto-merge transparency",
     "status": "completed"
   },
   {
