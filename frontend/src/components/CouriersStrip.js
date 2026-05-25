@@ -128,23 +128,11 @@ export default function CouriersStrip() {
               </div>
 
               {/* Products list — what cashier added */}
-              <div className="border-t border-neutral-100 pt-3">
-                <div className="text-[10px] uppercase tracking-wider text-neutral-400 font-medium mb-1.5">
-                  Products ({c.products.length})
+              <div className="border-t border-neutral-100 pt-3 flex items-center justify-between gap-2">
+                <div className="text-[10px] uppercase tracking-wider text-neutral-400 font-medium">
+                  Payment
                 </div>
-                <ul className="space-y-1">
-                  {c.products.map((p) => (
-                    <li
-                      key={p.id}
-                      className="flex items-center justify-between text-xs"
-                    >
-                      <span className="text-neutral-800 truncate font-medium">{p.name}</span>
-                      <span className="text-neutral-600 font-semibold tabular-nums ml-2">
-                        ×{p.quantity}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <PaymentBadge paid={c.payment_made} mode={c.payment_mode} />
               </div>
             </button>
           ))}
