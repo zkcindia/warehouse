@@ -44,20 +44,21 @@ const emptyEntry = () => ({
   courier_company: "",
   num_packages: "",
   photo: null,
+  package_photo: null,
   payment_mode: "none",
 });
 
 function CourierEntryCard({ entry, index, total, onChange, onRemove }) {
-  const fileRef = useRef(null);
+  const slipRef = useRef(null);
+  const pkgRef = useRef(null);
   const update = (patch) => onChange({ ...entry, ...patch });
 
-  const handlePhoto = async (e) => {
-    const file = e.target.files?.[0];
+  const handleImage = async (file, key) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) return toast.error("Choose an image file.");
     if (file.size > MAX_IMG_BYTES) return toast.error("Image must be under 4MB.");
     try {
-      update({ photo: await fileToDataURL(file) });
+      update({ [key]: await fileToDataURL(file) });
     } catch {
       toast.error("Failed to read image.");
     }
@@ -118,38 +119,90 @@ function CourierEntryCard({ entry, index, total, onChange, onRemove }) {
           </div>
         </div>
 
-        {/* Slip Photo */}
-        <div>
-          <label className="text-xs font-medium text-neutral-600">Slip / receipt photo (optional)</label>
-          <div className="mt-1 flex items-center gap-3">
-            {entry.photo ? (
-              <div className="relative">
-                <img
-                  src={entry.photo}
-                  alt="slip"
-                  className="w-20 h-20 object-cover rounded-xl border border-neutral-200"
-                />
-                <button
-                  type="button"
-                  onClick={() => update({ photo: null })}
-                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-white border border-neutral-200 text-neutral-600 shadow flex items-center justify-center hover:text-red-600"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ) : (
-              <div className="w-20 h-20 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 text-neutral-400 flex items-center justify-center">
-                <ImageIcon className="w-5 h-5" />
-              </div>
-            )}
-            <input ref={fileRef} type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50"
-            >
-              <Upload className="w-3.5 h-3.5" /> {entry.photo ? "Replace" : "Upload"}
-            </button>
+        {/* Photos */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Slip Photo */}
+          <div>
+            <label className="text-xs font-medium text-neutral-600">Slip / receipt photo <span className="text-neutral-400 font-normal">(optional)</span></label>
+            <div className="mt-1 flex items-center gap-3">
+              {entry.photo ? (
+                <div className="relative">
+                  <img
+                    src={entry.photo}
+                    alt="slip"
+                    className="w-20 h-20 object-cover rounded-xl border border-neutral-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => update({ photo: null })}
+                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-white border border-neutral-200 text-neutral-600 shadow flex items-center justify-center hover:text-red-600"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 text-neutral-400 flex items-center justify-center">
+                  <ImageIcon className="w-5 h-5" />
+                </div>
+              )}
+              <input
+                ref={slipRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleImage(e.target.files?.[0], "photo")}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => slipRef.current?.click()}
+                data-testid={`slip-photo-${index}`}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50"
+              >
+                <Upload className="w-3.5 h-3.5" /> {entry.photo ? "Replace" : "Upload"}
+              </button>
+            </div>
+          </div>
+
+          {/* Package Photo */}
+          <div>
+            <label className="text-xs font-medium text-neutral-600">Package photo <span className="text-neutral-400 font-normal">(optional)</span></label>
+            <div className="mt-1 flex items-center gap-3">
+              {entry.package_photo ? (
+                <div className="relative">
+                  <img
+                    src={entry.package_photo}
+                    alt="package"
+                    className="w-20 h-20 object-cover rounded-xl border border-neutral-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => update({ package_photo: null })}
+                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-white border border-neutral-200 text-neutral-600 shadow flex items-center justify-center hover:text-red-600"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 text-neutral-400 flex items-center justify-center">
+                  <Package className="w-5 h-5" />
+                </div>
+              )}
+              <input
+                ref={pkgRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleImage(e.target.files?.[0], "package_photo")}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => pkgRef.current?.click()}
+                data-testid={`package-photo-${index}`}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50"
+              >
+                <Upload className="w-3.5 h-3.5" /> {entry.package_photo ? "Replace" : "Upload"}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -233,6 +286,7 @@ export default function CashierDashboard() {
             courier_company: en.courier_company.trim() || null,
             num_packages: Number(en.num_packages),
             slip_photo: en.photo || null,
+            package_photo: en.package_photo || null,
             products: [],
             payment_made: isPaid,
             payment_mode: isPaid ? en.payment_mode : null,

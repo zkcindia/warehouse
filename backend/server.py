@@ -597,6 +597,7 @@ class CourierEntry(BaseModel):
     receiver_name: Optional[str] = Field(default=None, max_length=120)
     num_packages: int = Field(ge=1, le=100000)
     slip_photo: Optional[str] = None
+    package_photo: Optional[str] = None
     products: List[ProductIn] = Field(default_factory=list)
     charges: Optional[float] = Field(default=None, ge=0)
     payment_made: bool = False
@@ -636,6 +637,7 @@ class CourierOut(BaseModel):
     receiver_name: Optional[str] = None
     num_packages: int
     slip_photo: Optional[str] = None
+    package_photo: Optional[str] = None
     products: List[ProductOut]
     handled_by: Optional[str] = None
     charges: Optional[float] = None
@@ -695,6 +697,7 @@ def courier_doc_to_out(doc: dict) -> dict:
         'receiver_name': doc.get('receiver_name'),
         'num_packages': doc['num_packages'],
         'slip_photo': doc.get('slip_photo'),
+        'package_photo': doc.get('package_photo'),
         'products': products,
         'handled_by': doc.get('handled_by'),
         'charges': doc.get('charges'),
@@ -708,15 +711,21 @@ def courier_doc_to_out(doc: dict) -> dict:
         'created_by_name': doc.get('created_by_name', 'Cashier'),
     }
 
-async def _next_courier_number() -> str:
+async def _next_courier_number(now: Optional[datetime] = None) -> str:
+    """Generates a date-based courier number like '250525-01' (DDMMYY-NN).
+
+    Counter resets each calendar day in UTC.
+    """
+    now = now or datetime.now(timezone.utc)
+    date_key = now.strftime('%d%m%y')
     res = await db.counters.find_one_and_update(
-        {'_id': 'courier_number'},
+        {'_id': f'courier_number:{date_key}'},
         {'$inc': {'value': 1}},
         upsert=True,
         return_document=ReturnDocument.AFTER,
     )
     val = (res or {}).get('value') or 1
-    return f"CRX-{val:04d}"
+    return f"{date_key}-{val:02d}"
 
 @api_router.post("/couriers/batch", status_code=201)
 async def create_couriers_batch(body: CourierBatchCreate, user: dict = Depends(require_role(ROLE_CASHIER))):
@@ -727,12 +736,14 @@ async def create_couriers_batch(body: CourierBatchCreate, user: dict = Depends(r
             e.payment_mode = None
         if e.slip_photo and len(e.slip_photo) > 6_000_000:
             raise HTTPException(status_code=400, detail=f"Entry {idx + 1}: slip photo is too large (max ~4MB).")
+        if e.package_photo and len(e.package_photo) > 6_000_000:
+            raise HTTPException(status_code=400, detail=f"Entry {idx + 1}: package photo is too large (max ~4MB).")
 
     handled_by = (body.handled_by.strip() if body.handled_by else None) or None
     now = datetime.now(timezone.utc)
     created = []
     for e in body.entries:
-        courier_number = await _next_courier_number()
+        courier_number = await _next_courier_number(now)
         products = [{
             'id': str(uuid.uuid4()),
             'name': p.name.strip(),
@@ -747,6 +758,7 @@ async def create_couriers_batch(body: CourierBatchCreate, user: dict = Depends(r
             'receiver_name': (e.receiver_name.strip() if e.receiver_name else None) or None,
             'num_packages': int(e.num_packages),
             'slip_photo': e.slip_photo,
+            'package_photo': e.package_photo,
             'products': products,
             'handled_by': handled_by,
             'charges': float(e.charges) if e.charges is not None else None,
@@ -779,6 +791,7 @@ class CourierPatch(BaseModel):
     receiver_name: Optional[str] = Field(default=None, max_length=120)
     num_packages: Optional[int] = Field(default=None, ge=1, le=100000)
     slip_photo: Optional[str] = None
+    package_photo: Optional[str] = None
     handled_by: Optional[str] = Field(default=None, max_length=80)
     charges: Optional[float] = Field(default=None, ge=0)
     payment_made: Optional[bool] = None
@@ -804,6 +817,13 @@ async def patch_courier(cid: str, body: CourierPatch, user: dict = Depends(requi
             if len(body.slip_photo) > 6_000_000:
                 raise HTTPException(status_code=400, detail="Slip photo is too large (max ~4MB).")
             update['slip_photo'] = body.slip_photo
+    if body.package_photo is not None:
+        if body.package_photo == '':
+            update['package_photo'] = None
+        else:
+            if len(body.package_photo) > 6_000_000:
+                raise HTTPException(status_code=400, detail="Package photo is too large (max ~4MB).")
+            update['package_photo'] = body.package_photo
     if body.charges is not None:
         update['charges'] = float(body.charges)
     if body.payment_made is not None:
