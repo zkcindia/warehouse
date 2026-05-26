@@ -648,6 +648,10 @@ class CourierOut(BaseModel):
     accepted: bool = False
     accepted_at: Optional[str] = None
     accepted_by: Optional[str] = None
+    rejected: bool = False
+    rejected_reason: Optional[str] = None
+    rejected_at: Optional[str] = None
+    rejected_by: Optional[str] = None
     sent_to_data_entry: bool = False
     data_entry_done_count: int = 0
     created_at: datetime
@@ -711,6 +715,10 @@ def courier_doc_to_out(doc: dict) -> dict:
         'accepted': bool(doc.get('accepted', False)),
         'accepted_at': doc.get('accepted_at'),
         'accepted_by': doc.get('accepted_by'),
+        'rejected': bool(doc.get('rejected', False)),
+        'rejected_reason': doc.get('rejected_reason'),
+        'rejected_at': doc.get('rejected_at'),
+        'rejected_by': doc.get('rejected_by'),
         'sent_to_data_entry': bool(doc.get('sent_to_data_entry', False)),
         'data_entry_done_count': data_entry_done_count,
         'created_at': created_at,
@@ -904,9 +912,87 @@ async def accept_courier(
         'accepted_at': now_iso if body.accepted else None,
         'accepted_by': user['full_name'] if body.accepted else None,
     }
+    if body.accepted:
+        # Clear any previous rejection
+        update.update({
+            'rejected': False,
+            'rejected_reason': None,
+            'rejected_at': None,
+            'rejected_by': None,
+        })
     await db.couriers.update_one({'id': cid}, {'$set': update})
     updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
     return courier_doc_to_out(updated)
+
+
+class RejectCourierBody(BaseModel):
+    reason: Optional[str] = Field(default=None, max_length=500)
+
+
+@api_router.patch("/couriers/{cid}/reject", response_model=CourierOut)
+async def reject_courier(
+    cid: str,
+    body: RejectCourierBody,
+    user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE)),
+):
+    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Courier entry not found.")
+    if doc.get('sent_to_data_entry'):
+        raise HTTPException(
+            status_code=400,
+            detail="Courier already sent to Data Entry. Recall it first to reject.",
+        )
+    now_iso = datetime.now(timezone.utc).isoformat()
+    reason = (body.reason or '').strip() or None
+    await db.couriers.update_one(
+        {'id': cid},
+        {'$set': {
+            'rejected': True,
+            'rejected_reason': reason,
+            'rejected_at': now_iso,
+            'rejected_by': user['full_name'],
+            'accepted': False,
+            'accepted_at': None,
+            'accepted_by': None,
+            'sent_to_data_entry': False,
+        }},
+    )
+    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    return courier_doc_to_out(updated)
+
+
+@api_router.patch("/couriers/{cid}/resolve", response_model=CourierOut)
+async def resolve_courier_rejection(
+    cid: str,
+    user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER)),
+):
+    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Courier entry not found.")
+    if not doc.get('rejected'):
+        raise HTTPException(status_code=400, detail="This courier is not flagged as rejected.")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.couriers.update_one(
+        {'id': cid},
+        {'$set': {
+            'rejected': False,
+            'rejected_reason': None,
+            'rejected_resolved_at': now_iso,
+            'rejected_resolved_by': user['full_name'],
+        }},
+    )
+    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    return courier_doc_to_out(updated)
+
+
+@api_router.get("/couriers/rejected", response_model=List[CourierOut])
+async def list_rejected_couriers(
+    user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER)),
+):
+    cursor = db.couriers.find({'rejected': True}, {'_id': 0}).sort('rejected_at', -1)
+    docs = await cursor.to_list(500)
+    return [courier_doc_to_out(d) for d in docs]
 
 @api_router.patch("/couriers/{cid}/checklist", response_model=CourierOut)
 async def update_courier_checklist(

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import DashboardShell from "@/components/DashboardShell";
 import { useAuth } from "@/context/AuthContext";
@@ -21,6 +21,9 @@ import {
   Trash2,
   Save,
   ListChecks,
+  RotateCcw,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -72,6 +75,40 @@ export default function CashierDashboard() {
   const [drafts, setDrafts] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [savedSession, setSavedSession] = useState([]);
+  const [rejected, setRejected] = useState([]);
+  const [resolvingId, setResolvingId] = useState(null);
+
+  const loadRejected = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/couriers/rejected`, {
+        headers: authHeaders(),
+      });
+      setRejected(res.data || []);
+    } catch (e) {
+      // silent
+    }
+  }, [API, authHeaders]);
+
+  useEffect(() => {
+    loadRejected();
+  }, [loadRejected]);
+
+  const resolveRejection = async (c) => {
+    setResolvingId(c.id);
+    try {
+      await axios.patch(
+        `${API}/couriers/${c.id}/resolve`,
+        {},
+        { headers: authHeaders() }
+      );
+      toast.success(`${c.courier_number} marked as resolved`);
+      setRejected((arr) => arr.filter((r) => r.id !== c.id));
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to resolve");
+    } finally {
+      setResolvingId(null);
+    }
+  };
 
   const isEditing = !!editingUid;
   const update = (patch) => setEntry((e) => ({ ...e, ...patch }));
@@ -193,6 +230,100 @@ export default function CashierDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Rejected couriers — needs attention */}
+        {rejected.length > 0 && (
+          <div className="bg-white border border-red-200 rounded-2xl p-4">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-red-600 text-white flex items-center justify-center">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-neutral-900">
+                    Rejected by Warehouse · needs your attention
+                  </div>
+                  <div className="text-[11px] text-neutral-500">
+                    {rejected.length} courier
+                    {rejected.length === 1 ? "" : "s"} sent back · check the
+                    reason and mark resolved once fixed.
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={loadRejected}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs text-neutral-500 hover:bg-neutral-100"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Refresh
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {rejected.map((c) => (
+                <div
+                  key={c.id}
+                  data-testid={`rejected-${c.courier_number}`}
+                  className="flex items-start gap-3 p-3 border border-red-200 bg-red-50/40 rounded-xl"
+                >
+                  {c.slip_photo ? (
+                    <img
+                      src={c.slip_photo}
+                      alt="slip"
+                      className="w-12 h-12 rounded-lg object-cover border border-red-100 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg bg-white border border-red-100 text-red-300 flex items-center justify-center shrink-0">
+                      <ImageIcon className="w-5 h-5" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-mono font-semibold text-neutral-900">
+                        {c.courier_number}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-neutral-100 text-neutral-700">
+                        <Package className="w-3 h-3" /> {c.num_packages} pkgs
+                      </span>
+                      {c.courier_company && (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-neutral-500">
+                          <Truck className="w-3 h-3" /> {c.courier_company}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 text-[12px] text-red-800">
+                      <span className="font-medium">Reason: </span>
+                      {c.rejected_reason || (
+                        <span className="text-red-500/80 italic">
+                          No reason provided
+                        </span>
+                      )}
+                    </div>
+                    {c.rejected_by && (
+                      <div className="text-[11px] text-neutral-500 mt-0.5">
+                        Rejected by {c.rejected_by}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => resolveRejection(c)}
+                    disabled={resolvingId === c.id}
+                    data-testid={`resolve-${c.courier_number}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-60 shrink-0"
+                  >
+                    {resolvingId === c.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    )}
+                    Mark resolved
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Saved this session */}
         {savedSession.length > 0 && (

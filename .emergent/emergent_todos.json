@@ -1,26 +1,22 @@
 [
   {
-    "content": "Backend: Add 'accepted' flag + PATCH /api/couriers/{cid}/accept endpoint",
-    "status": "completed"
+    "content": "Backend: Add rejected flag + reason fields + reject/resolve endpoints",
+    "status": "in_progress"
   },
   {
-    "content": "Frontend: Restructure CouriersStrip from grid cards to full-width rows",
-    "status": "completed"
+    "content": "Frontend SOP modal: split footer into Reject (with reason) + Accept (send to DE)",
+    "status": "pending"
   },
   {
-    "content": "Frontend: Implement progressive action buttons (View, Accept, Edit, Checklist, Items, SOP)",
-    "status": "completed"
+    "content": "Frontend Warehouse row: rename 'SOP' to 'Complete SOP'",
+    "status": "pending"
   },
   {
-    "content": "Frontend: Build SOP summary modal (checklist details + product details + confirm/send-to-data-entry)",
-    "status": "completed"
-  },
-  {
-    "content": "Frontend: Lock Add Items dialog to single courier when opened from row",
-    "status": "completed"
+    "content": "Frontend Cashier dashboard: show 'Rejected couriers' section with edit & resolve",
+    "status": "pending"
   },
   {
     "content": "Test end-to-end",
-    "status": "completed"
+    "status": "pending"
   }
 ]

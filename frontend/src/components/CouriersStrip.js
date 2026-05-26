@@ -21,6 +21,7 @@ import {
   Image as ImageIcon,
   Check,
   Lock,
+  RotateCcw,
 } from "lucide-react";
 
 function ActionBtn({
@@ -198,6 +199,11 @@ export default function CouriersStrip({ onCouriersChange }) {
                           <Check className="w-3 h-3" /> Accepted
                         </span>
                       )}
+                      {c.rejected && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-700 border border-red-200">
+                          <RotateCcw className="w-3 h-3" /> Rejected · sent back
+                        </span>
+                      )}
                       {c.sent_to_data_entry && (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
                           <Lock className="w-3 h-3" /> Sent to DE
@@ -274,7 +280,7 @@ export default function CouriersStrip({ onCouriersChange }) {
                       {checklistDone && hasItems && (
                         <ActionBtn
                           icon={FileText}
-                          label="SOP"
+                          label="Complete SOP"
                           onClick={() => setSopFor(c)}
                           variant="sop"
                           testId={`row-sop-${c.courier_number}`}

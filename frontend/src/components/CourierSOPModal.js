@@ -21,11 +21,16 @@ import {
   ClipboardCheck,
   Boxes,
   User,
+  XCircle,
+  RotateCcw,
 } from "lucide-react";
 
 export default function CourierSOPModal({ courier, onClose, onUpdated }) {
   const { API, authHeaders } = useAuth();
   const [sending, setSending] = useState(false);
+  const [rejectMode, setRejectMode] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejecting, setRejecting] = useState(false);
 
   if (!courier) return null;
   const cp = checklistProgress(courier.checklist);
@@ -35,7 +40,9 @@ export default function CourierSOPModal({ courier, onClose, onUpdated }) {
   const alreadySent = !!courier.sent_to_data_entry;
 
   const close = () => {
-    if (sending) return;
+    if (sending || rejecting) return;
+    setRejectMode(false);
+    setRejectReason("");
     onClose?.();
   };
 
@@ -54,6 +61,24 @@ export default function CourierSOPModal({ courier, onClose, onUpdated }) {
       toast.error(e?.response?.data?.detail || "Failed to send");
     } finally {
       setSending(false);
+    }
+  };
+
+  const rejectCourier = async () => {
+    setRejecting(true);
+    try {
+      const res = await axios.patch(
+        `${API}/couriers/${courier.id}/reject`,
+        { reason: rejectReason.trim() || null },
+        { headers: authHeaders() }
+      );
+      toast.success(`${courier.courier_number} sent back to Cashier`);
+      onUpdated?.(res.data);
+      onClose?.();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to reject");
+    } finally {
+      setRejecting(false);
     }
   };
 
@@ -304,39 +329,103 @@ export default function CourierSOPModal({ courier, onClose, onUpdated }) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-2 px-6 py-4 border-t border-neutral-100 bg-white">
-          <div className="text-[12px] text-neutral-500">
-            {cp.complete && items.length > 0 && !alreadySent
-              ? "Ready to send to Data Entry"
-              : alreadySent
-              ? "This courier is locked. Recall it from Data Entry to edit."
-              : "Complete checklist and add items to proceed."}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={close}
-              className="px-4 py-2 rounded-lg border border-neutral-200 text-sm text-neutral-700 hover:bg-neutral-50"
-            >
-              Close
-            </button>
-            <button
-              type="button"
-              onClick={sendToDataEntry}
-              disabled={
-                sending || alreadySent || !cp.complete || items.length === 0
-              }
-              data-testid="sop-send-data-entry-btn"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800 disabled:opacity-60"
-            >
-              {sending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
-              {alreadySent ? "Sent to Data Entry" : "Confirm & send to Data Entry"}
-            </button>
-          </div>
+        <div className="px-6 py-4 border-t border-neutral-100 bg-white">
+          {rejectMode ? (
+            <div className="space-y-3">
+              <div className="flex items-start gap-2">
+                <XCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-neutral-900">
+                    Reject courier · send back to Cashier
+                  </div>
+                  <div className="text-[12px] text-neutral-500 mt-0.5">
+                    The Cashier will see this courier with your reason and can
+                    fix it before re-submitting.
+                  </div>
+                </div>
+              </div>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Reason for rejection (optional but recommended) — e.g. wrong company name, missing slip photo, mismatched packages…"
+                data-testid="sop-reject-reason"
+                rows={3}
+                maxLength={500}
+                className="w-full px-3 py-2 rounded-lg border border-red-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/40 resize-none"
+              />
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRejectMode(false);
+                    setRejectReason("");
+                  }}
+                  disabled={rejecting}
+                  className="px-4 py-2 rounded-lg border border-neutral-200 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={rejectCourier}
+                  disabled={rejecting}
+                  data-testid="sop-confirm-reject-btn"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-60"
+                >
+                  {rejecting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4" />
+                  )}
+                  Confirm reject
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[12px] text-neutral-500">
+                {alreadySent
+                  ? "This courier is locked in Data Entry."
+                  : cp.complete && items.length > 0
+                  ? "Review and choose: accept (forward) or reject (send back)"
+                  : "Complete checklist and add items to proceed."}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={close}
+                  className="px-4 py-2 rounded-lg border border-neutral-200 text-sm text-neutral-700 hover:bg-neutral-50"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRejectMode(true)}
+                  disabled={alreadySent}
+                  data-testid="sop-reject-btn"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-red-300 bg-white text-red-700 text-sm font-medium hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <XCircle className="w-4 h-4" /> Reject
+                </button>
+                <button
+                  type="button"
+                  onClick={sendToDataEntry}
+                  disabled={
+                    sending || alreadySent || !cp.complete || items.length === 0
+                  }
+                  data-testid="sop-send-data-entry-btn"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  {sending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4" />
+                  )}
+                  {alreadySent ? "Already accepted" : "Accept & forward"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
