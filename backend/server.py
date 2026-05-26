@@ -611,6 +611,22 @@ async def delete_product(parcel_id: str, product_id: str, user: dict = Depends(r
 # ============================================================
 # Couriers (outgoing shipments) - Cashier managed
 # ============================================================
+class CourierAttachment(BaseModel):
+    id: str
+    name: str
+    mime_type: Optional[str] = None
+    size: Optional[int] = None
+    data: str  # base64 data URL
+    uploaded_at: Optional[str] = None
+
+
+class CourierAttachmentIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    mime_type: Optional[str] = Field(default=None, max_length=120)
+    size: Optional[int] = Field(default=None, ge=0)
+    data: str = Field(min_length=1)
+
+
 class CourierEntry(BaseModel):
     courier_company: Optional[str] = Field(default=None, max_length=120)
     tracking_number: Optional[str] = Field(default=None, max_length=80)
@@ -622,6 +638,7 @@ class CourierEntry(BaseModel):
     charges: Optional[float] = Field(default=None, ge=0)
     payment_made: bool = False
     payment_mode: Optional[Literal['upi', 'card', 'cash']] = None
+    attachments: List[CourierAttachmentIn] = Field(default_factory=list)
 
 class CourierBatchCreate(BaseModel):
     handled_by: Optional[str] = Field(default=None, max_length=80)
@@ -683,6 +700,7 @@ class CourierOut(BaseModel):
     verification_complete_by: Optional[str] = None
     data_entry_done_count: int = 0
     verification_done_count: int = 0
+    attachments: List[CourierAttachment] = Field(default_factory=list)
     created_at: datetime
     created_by_name: str
 
@@ -803,6 +821,7 @@ def courier_doc_to_out(doc: dict) -> dict:
         'verification_complete_by': doc.get('verification_complete_by'),
         'data_entry_done_count': data_entry_done_count,
         'verification_done_count': verification_done_count,
+        'attachments': doc.get('attachments') or [],
         'created_at': created_at,
         'created_by_name': doc.get('created_by_name', 'Cashier'),
     }
@@ -834,6 +853,16 @@ async def create_couriers_batch(body: CourierBatchCreate, user: dict = Depends(r
             raise HTTPException(status_code=400, detail=f"Entry {idx + 1}: slip photo is too large (max ~4MB).")
         if e.package_photo and len(e.package_photo) > 6_000_000:
             raise HTTPException(status_code=400, detail=f"Entry {idx + 1}: package photo is too large (max ~4MB).")
+        # Attachments size validation (max 10MB each, 50MB total per courier)
+        total_att = 0
+        for ai, a in enumerate(e.attachments or []):
+            if not a.data:
+                continue
+            if len(a.data) > 14_000_000:  # ~10MB base64
+                raise HTTPException(status_code=400, detail=f"Entry {idx + 1}: attachment '{a.name}' is too large (max ~10MB).")
+            total_att += len(a.data)
+        if total_att > 70_000_000:  # ~50MB total
+            raise HTTPException(status_code=400, detail=f"Entry {idx + 1}: total attachments exceed ~50MB.")
 
     handled_by = (body.handled_by.strip() if body.handled_by else None) or None
     now = datetime.now(timezone.utc)
@@ -860,6 +889,18 @@ async def create_couriers_batch(body: CourierBatchCreate, user: dict = Depends(r
             'charges': float(e.charges) if e.charges is not None else None,
             'payment_made': bool(e.payment_made),
             'payment_mode': e.payment_mode,
+            'attachments': [
+                {
+                    'id': str(uuid.uuid4()),
+                    'name': a.name.strip()[:200],
+                    'mime_type': (a.mime_type or '').strip()[:120] or None,
+                    'size': int(a.size) if a.size is not None else None,
+                    'data': a.data,
+                    'uploaded_at': now.isoformat(),
+                }
+                for a in (e.attachments or [])
+                if a.data
+            ],
             'created_at': now.isoformat(),
             'created_by': user['id'],
             'created_by_name': user['full_name'],

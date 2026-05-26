@@ -19,6 +19,11 @@ import {
   Calendar,
   UserRound,
   Boxes,
+  Paperclip,
+  Download,
+  FileText,
+  FileSpreadsheet,
+  File as FileIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -225,6 +230,45 @@ export default function CourierDetailsModal({ courier, onClose, onUpdated, onDel
                   value={new Date(courier.created_at).toLocaleString()}
                 />
               </div>
+
+              {/* Attachments (PDF/DOC/etc) */}
+              {(courier.attachments?.length || 0) > 0 && (
+                <div data-testid="courier-attachments-section">
+                  <div className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-neutral-400 mb-2">
+                    <Paperclip className="w-3.5 h-3.5" /> Attachments ({courier.attachments.length})
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {courier.attachments.map((a) => {
+                      const Icon = attachmentIcon(a.mime_type, a.name);
+                      return (
+                        <a
+                          key={a.id}
+                          href={a.data}
+                          download={a.name}
+                          target="_blank"
+                          rel="noreferrer"
+                          data-testid={`attachment-${a.id}`}
+                          className="flex items-center gap-2 p-2.5 rounded-xl border border-neutral-200 bg-neutral-50/40 hover:bg-white hover:border-neutral-300 transition-colors"
+                        >
+                          <div className="w-9 h-9 rounded-md bg-white border border-neutral-200 text-neutral-600 flex items-center justify-center shrink-0">
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-medium text-neutral-900 truncate" title={a.name}>
+                              {a.name}
+                            </div>
+                            <div className="text-[10px] text-neutral-500">
+                              {a.size != null ? formatBytesLocal(a.size) : "—"}
+                              {a.mime_type ? ` · ${a.mime_type.split("/").pop()}` : ""}
+                            </div>
+                          </div>
+                          <Download className="w-4 h-4 text-neutral-400 shrink-0" />
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <div className="text-xs uppercase tracking-wider text-neutral-400 mb-2">
@@ -500,4 +544,24 @@ function InfoTile({ icon: Icon, label, value }) {
       <div className="mt-1 text-sm font-medium text-neutral-800 break-words">{value}</div>
     </div>
   );
+}
+
+function attachmentIcon(mime, name) {
+  const n = (name || "").toLowerCase();
+  if ((mime && mime.includes("pdf")) || n.endsWith(".pdf")) return FileText;
+  if (
+    (mime && (mime.includes("spreadsheet") || mime.includes("excel"))) ||
+    n.endsWith(".xls") ||
+    n.endsWith(".xlsx") ||
+    n.endsWith(".csv")
+  )
+    return FileSpreadsheet;
+  return FileIcon;
+}
+
+function formatBytesLocal(n) {
+  if (n == null) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }

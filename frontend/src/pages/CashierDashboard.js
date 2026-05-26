@@ -24,11 +24,56 @@ import {
   RotateCcw,
   AlertTriangle,
   CheckCircle2,
+  FileText,
+  FileSpreadsheet,
+  File as FileIcon,
+  Paperclip,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import RejectedCourierEditModal from "@/components/RejectedCourierEditModal";
 
 const MAX_IMG_BYTES = 4 * 1024 * 1024;
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB per attached doc/pdf
+const ALLOWED_FILE_MIMES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // docx
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // xlsx
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation", // pptx
+  "text/plain",
+  "text/csv",
+];
+const ALLOWED_FILE_EXTS = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv"];
+
+function isAllowedFile(file) {
+  if (!file) return false;
+  if (ALLOWED_FILE_MIMES.includes(file.type)) return true;
+  const name = (file.name || "").toLowerCase();
+  return ALLOWED_FILE_EXTS.some((ext) => name.endsWith(ext));
+}
+
+function fileIconFor(mime, name) {
+  const n = (name || "").toLowerCase();
+  if ((mime && mime.includes("pdf")) || n.endsWith(".pdf")) return FileText;
+  if (
+    (mime && (mime.includes("spreadsheet") || mime.includes("excel"))) ||
+    n.endsWith(".xls") ||
+    n.endsWith(".xlsx") ||
+    n.endsWith(".csv")
+  )
+    return FileSpreadsheet;
+  return FileIcon;
+}
+
+function formatBytes(n) {
+  if (n == null) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
 
 function fileToDataURL(file) {
   return new Promise((res, rej) => {
@@ -66,11 +111,13 @@ const blankEntry = () => ({
   photo: null,
   payment_mode: "none",
   handled_by: "",
+  attachments: [],
 });
 
 export default function CashierDashboard() {
   const { user, API, authHeaders } = useAuth();
   const fileRef = useRef(null);
+  const docRef = useRef(null);
   const [entry, setEntry] = useState(blankEntry());
   const [editingUid, setEditingUid] = useState(null);
   const [drafts, setDrafts] = useState([]);
@@ -129,10 +176,54 @@ export default function CashierDashboard() {
     }
   };
 
+  const handleDocs = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const valid = [];
+    for (const file of files) {
+      if (!isAllowedFile(file)) {
+        toast.error(`${file.name}: unsupported file type (use PDF, DOC, XLS, PPT, TXT, CSV).`);
+        continue;
+      }
+      if (file.size > MAX_FILE_BYTES) {
+        toast.error(`${file.name}: file is too large (max 10MB).`);
+        continue;
+      }
+      try {
+        const dataUrl = await fileToDataURL(file);
+        valid.push({
+          uid: Math.random().toString(36).slice(2),
+          name: file.name,
+          mime_type: file.type || "",
+          size: file.size,
+          data: dataUrl,
+        });
+      } catch {
+        toast.error(`${file.name}: failed to read file.`);
+      }
+    }
+    if (valid.length) {
+      setEntry((eState) => ({
+        ...eState,
+        attachments: [...(eState.attachments || []), ...valid],
+      }));
+      toast.success(`${valid.length} file${valid.length === 1 ? "" : "s"} attached`);
+    }
+    if (docRef.current) docRef.current.value = "";
+  };
+
+  const removeAttachment = (uid) => {
+    setEntry((eState) => ({
+      ...eState,
+      attachments: (eState.attachments || []).filter((a) => a.uid !== uid),
+    }));
+  };
+
   const resetCard = () => {
     setEntry(blankEntry());
     setEditingUid(null);
     if (fileRef.current) fileRef.current.value = "";
+    if (docRef.current) docRef.current.value = "";
   };
 
   const validate = (e) => {
@@ -185,6 +276,12 @@ export default function CashierDashboard() {
             products: [],
             payment_made: isPaid,
             payment_mode: isPaid ? d.payment_mode : null,
+            attachments: (d.attachments || []).map((a) => ({
+              name: a.name,
+              mime_type: a.mime_type || null,
+              size: a.size ?? null,
+              data: a.data,
+            })),
           };
         }),
       };
@@ -500,6 +597,77 @@ export default function CashierDashboard() {
                 </div>
               </div>
 
+              {/* Files / Documents (PDF, DOC, XLS, etc.) */}
+              <div data-testid="courier-docs-section">
+                <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
+                  <Paperclip className="w-3.5 h-3.5" /> Files / documents{" "}
+                  <span className="text-neutral-400 font-normal">
+                    (PDF, DOC, XLS, PPT, TXT, CSV · optional)
+                  </span>
+                </label>
+                <input
+                  ref={docRef}
+                  type="file"
+                  multiple
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv"
+                  onChange={handleDocs}
+                  className="hidden"
+                />
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => docRef.current?.click()}
+                    data-testid="courier-docs-upload-btn"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed border-neutral-300 text-xs text-neutral-700 hover:bg-neutral-50 hover:border-neutral-400"
+                  >
+                    <Upload className="w-3.5 h-3.5" /> Attach files
+                  </button>
+                  {(entry.attachments?.length || 0) > 0 && (
+                    <span className="text-[11px] text-neutral-500">
+                      {entry.attachments.length} file
+                      {entry.attachments.length === 1 ? "" : "s"} attached
+                    </span>
+                  )}
+                </div>
+                {(entry.attachments?.length || 0) > 0 && (
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {entry.attachments.map((a) => {
+                      const Icon = fileIconFor(a.mime_type, a.name);
+                      return (
+                        <div
+                          key={a.uid}
+                          data-testid={`courier-doc-chip-${a.uid}`}
+                          className="flex items-center gap-2 p-2 pr-1 rounded-lg border border-neutral-200 bg-neutral-50/60"
+                        >
+                          <div className="w-8 h-8 rounded-md bg-white border border-neutral-200 text-neutral-600 flex items-center justify-center shrink-0">
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div
+                              className="text-xs font-medium text-neutral-900 truncate"
+                              title={a.name}
+                            >
+                              {a.name}
+                            </div>
+                            <div className="text-[10px] text-neutral-500">
+                              {formatBytes(a.size)}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeAttachment(a.uid)}
+                            data-testid={`courier-doc-remove-${a.uid}`}
+                            className="w-7 h-7 rounded-md text-neutral-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <div className="text-xs font-medium text-neutral-600 mb-2">
                   Payment mode
@@ -689,6 +857,12 @@ function DraftPreviewCard({ draft, index, active, onEdit, onDelete }) {
               <PayIcon className="w-3 h-3" />
               {PAYMENT_LABEL[draft.payment_mode]}
             </span>
+            {(draft.attachments?.length || 0) > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                <Paperclip className="w-3 h-3" /> {draft.attachments.length} file
+                {draft.attachments.length === 1 ? "" : "s"}
+              </span>
+            )}
           </div>
           {draft.handled_by?.trim() && (
             <div className="text-[11px] text-neutral-500 mt-0.5">
