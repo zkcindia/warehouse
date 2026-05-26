@@ -247,11 +247,15 @@ export default function CouriersStrip({ onCouriersChange }) {
                           <RotateCcw className="w-3 h-3" /> Rejected · sent back
                         </span>
                       )}
-                      {c.sent_to_data_entry && (
+                      {c.sent_to_data_entry ? (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
-                          <Lock className="w-3 h-3" /> Sent to DE
+                          <Lock className="w-3 h-3" /> In Data Entry
                         </span>
-                      )}
+                      ) : c.sent_to_owner ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                          <Lock className="w-3 h-3" /> Sent to Owner
+                        </span>
+                      ) : null}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 text-[12px] text-neutral-500">
                       <span className="inline-flex items-center gap-1">
@@ -300,7 +304,7 @@ export default function CouriersStrip({ onCouriersChange }) {
                         icon={Pencil}
                         label="Edit"
                         onClick={() => setEditing(c)}
-                        disabled={c.sent_to_data_entry}
+                        disabled={c.sent_to_data_entry || c.sent_to_owner}
                         testId={`row-edit-${c.courier_number}`}
                       />
                       <ActionBtn
@@ -312,7 +316,7 @@ export default function CouriersStrip({ onCouriersChange }) {
                         }
                         onClick={() => setChecklistFor(c)}
                         variant={checklistDone ? "complete" : "primary"}
-                        disabled={c.sent_to_data_entry}
+                        disabled={c.sent_to_data_entry || c.sent_to_owner}
                         testId={`row-checklist-${c.courier_number}`}
                       />
                       {checklistDone && (
@@ -325,16 +329,26 @@ export default function CouriersStrip({ onCouriersChange }) {
                           }
                           onClick={() => setItemsFor(c)}
                           variant={hasItems ? "complete" : "primary"}
-                          disabled={c.sent_to_data_entry}
+                          disabled={c.sent_to_data_entry || c.sent_to_owner}
                           testId={`row-items-${c.courier_number}`}
                         />
                       )}
                       {checklistDone && hasItems && (
                         <ActionBtn
                           icon={FileText}
-                          label="Complete SOP"
+                          label={
+                            c.sent_to_data_entry
+                              ? "Locked"
+                              : c.sent_to_owner
+                              ? "Review (sent)"
+                              : "Complete SOP"
+                          }
                           onClick={() => setSopFor(c)}
-                          variant="sop"
+                          variant={
+                            c.sent_to_data_entry || c.sent_to_owner
+                              ? "complete"
+                              : "sop"
+                          }
                           testId={`row-sop-${c.courier_number}`}
                         />
                       )}

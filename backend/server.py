@@ -653,6 +653,9 @@ class CourierOut(BaseModel):
     rejected_at: Optional[str] = None
     rejected_by: Optional[str] = None
     sent_to_data_entry: bool = False
+    sent_to_owner: bool = False
+    sent_to_owner_at: Optional[str] = None
+    sent_to_owner_by: Optional[str] = None
     data_entry_done_count: int = 0
     created_at: datetime
     created_by_name: str
@@ -720,6 +723,9 @@ def courier_doc_to_out(doc: dict) -> dict:
         'rejected_at': doc.get('rejected_at'),
         'rejected_by': doc.get('rejected_by'),
         'sent_to_data_entry': bool(doc.get('sent_to_data_entry', False)),
+        'sent_to_owner': bool(doc.get('sent_to_owner', False)),
+        'sent_to_owner_at': doc.get('sent_to_owner_at'),
+        'sent_to_owner_by': doc.get('sent_to_owner_by'),
         'data_entry_done_count': data_entry_done_count,
         'created_at': created_at,
         'created_by_name': doc.get('created_by_name', 'Cashier'),
@@ -1197,20 +1203,133 @@ async def send_courier_to_data_entry(
     body: SendToDataEntryBody,
     user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE)),
 ):
+    """
+    Warehouse "Complete SOP" hand-off.
+    Sends the courier to Owner for review (NOT directly to Data Entry).
+    Owner must then call /owner-forward to release it to the Data Entry queue.
+    Route name kept for backward compatibility with existing frontend.
+    """
     doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Courier entry not found.")
     if body.sent and not doc.get('products'):
-        raise HTTPException(status_code=400, detail="Add at least one item before sending to Data Entry.")
+        raise HTTPException(status_code=400, detail="Add at least one item before completing SOP.")
     now_iso = datetime.now(timezone.utc).isoformat()
     update = {
-        'sent_to_data_entry': bool(body.sent),
-        'sent_to_data_entry_at': now_iso if body.sent else None,
-        'sent_to_data_entry_by': user['full_name'] if body.sent else None,
+        'sent_to_owner': bool(body.sent),
+        'sent_to_owner_at': now_iso if body.sent else None,
+        'sent_to_owner_by': user['full_name'] if body.sent else None,
+    }
+    if not body.sent:
+        # If un-sending, also clear DE flag
+        update['sent_to_data_entry'] = False
+        update['sent_to_data_entry_at'] = None
+        update['sent_to_data_entry_by'] = None
+    await db.couriers.update_one({'id': cid}, {'$set': update})
+    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    return courier_doc_to_out(updated)
+
+
+class OwnerForwardBody(BaseModel):
+    forward: bool = True
+
+
+@api_router.patch("/couriers/{cid}/owner-forward", response_model=CourierOut)
+async def owner_forward_to_data_entry(
+    cid: str,
+    body: OwnerForwardBody,
+    user: dict = Depends(require_role(ROLE_OWNER)),
+):
+    """
+    Owner-only: forwards a Warehouse-completed courier (with products) to the
+    Data Entry team. Sets sent_to_data_entry=True.
+    """
+    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Courier entry not found.")
+    if not doc.get('sent_to_owner'):
+        raise HTTPException(
+            status_code=400,
+            detail="Courier has not been submitted by Warehouse yet.",
+        )
+    if body.forward and not doc.get('products'):
+        raise HTTPException(status_code=400, detail="Courier has no items to forward.")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    update = {
+        'sent_to_data_entry': bool(body.forward),
+        'sent_to_data_entry_at': now_iso if body.forward else None,
+        'sent_to_data_entry_by': user['full_name'] if body.forward else None,
     }
     await db.couriers.update_one({'id': cid}, {'$set': update})
     updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
     return courier_doc_to_out(updated)
+
+
+@api_router.get("/owner/couriers/pending", response_model=List[CourierOut])
+async def list_owner_pending_couriers(
+    user: dict = Depends(require_role(ROLE_OWNER)),
+):
+    """Couriers submitted by Warehouse and awaiting Owner forward to Data Entry."""
+    cursor = db.couriers.find(
+        {
+            'sent_to_owner': True,
+            '$or': [
+                {'sent_to_data_entry': {'$exists': False}},
+                {'sent_to_data_entry': False},
+            ],
+        },
+        {'_id': 0},
+    ).sort('sent_to_owner_at', -1)
+    docs = await cursor.to_list(1000)
+    return [courier_doc_to_out(d) for d in docs]
+
+
+@api_router.get("/owner/analytics")
+async def owner_analytics(user: dict = Depends(require_role(ROLE_OWNER))):
+    """Lightweight analytics for the Owner dashboard."""
+    total = await db.couriers.count_documents({})
+    rejected = await db.couriers.count_documents({'rejected': True})
+    pending_warehouse = await db.couriers.count_documents({
+        'accepted': True,
+        '$or': [
+            {'sent_to_owner': {'$exists': False}},
+            {'sent_to_owner': False},
+        ],
+        'rejected': False,
+    })
+    pending_owner = await db.couriers.count_documents({
+        'sent_to_owner': True,
+        '$or': [
+            {'sent_to_data_entry': {'$exists': False}},
+            {'sent_to_data_entry': False},
+        ],
+    })
+    in_data_entry = await db.couriers.count_documents({'sent_to_data_entry': True})
+    # Total items and total inventory value (best-effort, only for couriers with products)
+    pipeline = [
+        {'$unwind': {'path': '$products', 'preserveNullAndEmptyArrays': False}},
+        {
+            '$group': {
+                '_id': None,
+                'items': {'$sum': 1},
+                'units': {'$sum': {'$ifNull': ['$products.quantity', 0]}},
+                'damaged': {'$sum': {'$ifNull': ['$products.damaged_count', 0]}},
+            }
+        },
+    ]
+    agg_cursor = db.couriers.aggregate(pipeline)
+    agg = await agg_cursor.to_list(1)
+    item_stats = agg[0] if agg else {'items': 0, 'units': 0, 'damaged': 0}
+    return {
+        'total_couriers': total,
+        'pending_warehouse': pending_warehouse,
+        'pending_owner_review': pending_owner,
+        'in_data_entry': in_data_entry,
+        'rejected_open': rejected,
+        'total_items': int(item_stats.get('items', 0)),
+        'total_units': int(item_stats.get('units', 0)),
+        'damaged_units': int(item_stats.get('damaged', 0)),
+    }
 
 
 @api_router.get("/data-entry/couriers", response_model=List[CourierOut])

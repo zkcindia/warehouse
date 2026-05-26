@@ -51,6 +51,7 @@ export default function RejectedCourierEditModal({
     handled_by: "",
   });
   const [saving, setSaving] = useState(false);
+  const [origSlipPhoto, setOrigSlipPhoto] = useState(null);
 
   useEffect(() => {
     if (!courier) return;
@@ -63,6 +64,7 @@ export default function RejectedCourierEditModal({
         : "none",
       handled_by: courier.handled_by || "",
     });
+    setOrigSlipPhoto(courier.slip_photo || null);
   }, [courier]);
 
   if (!courier) return null;
@@ -96,17 +98,23 @@ export default function RejectedCourierEditModal({
     setSaving(true);
     try {
       const isPaid = form.payment_mode !== "none";
+      // Build patch body — use empty string ("") for fields backend treats as "clear",
+      // and only include slip_photo when it actually changed (avoid sending huge base64 every time).
       const patchBody = {
-        courier_company: form.courier_company.trim() || null,
+        courier_company: form.courier_company.trim(),
         num_packages: Number(form.num_packages),
-        slip_photo: form.slip_photo ?? "",
-        handled_by: form.handled_by.trim() || null,
+        handled_by: form.handled_by.trim(),
         payment_made: isPaid,
         payment_mode: isPaid ? form.payment_mode : null,
       };
+      if (form.slip_photo !== origSlipPhoto) {
+        patchBody.slip_photo = form.slip_photo ?? "";
+      }
       // 1) Patch fields
       await axios.patch(`${API}/couriers/${courier.id}`, patchBody, {
         headers: authHeaders(),
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
       });
       // 2) Mark as resolved (clears rejection, courier goes back to Warehouse queue)
       const res = await axios.patch(
@@ -118,7 +126,14 @@ export default function RejectedCourierEditModal({
       onResent?.(res.data);
       onClose?.();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Failed to resend courier");
+      // Surface the actual server error so user knows why it failed
+      const detail =
+        e?.response?.data?.detail ||
+        e?.response?.data?.message ||
+        e?.message ||
+        "Failed to resend courier";
+      console.error("Resend error:", e?.response?.data || e);
+      toast.error(typeof detail === "string" ? detail : "Failed to resend courier");
     } finally {
       setSaving(false);
     }

@@ -1,22 +1,22 @@
 [
   {
-    "content": "Backend: Add rejected flag + reason fields + reject/resolve endpoints",
-    "status": "in_progress"
+    "content": "Backend: add sent_to_owner field, update SOP send route to set sent_to_owner instead of sent_to_data_entry, add Owner forward endpoint, update DE filter",
+    "status": "completed"
   },
   {
-    "content": "Frontend SOP modal: split footer into Reject (with reason) + Accept (send to DE)",
-    "status": "pending"
+    "content": "Frontend Warehouse: simplify SOP modal - remove reject + send to DE, add Complete & send to Owner, show full product details",
+    "status": "completed"
   },
   {
-    "content": "Frontend Warehouse row: rename 'SOP' to 'Complete SOP'",
-    "status": "pending"
+    "content": "Frontend Owner: add pending review section with list-wise products and forward-to-DE action + analytics tiles",
+    "status": "completed"
   },
   {
-    "content": "Frontend Cashier dashboard: show 'Rejected couriers' section with edit & resolve",
-    "status": "pending"
+    "content": "Frontend Data Entry: confirm it only shows owner-forwarded couriers (no change if filter is already sent_to_data_entry)",
+    "status": "completed"
   },
   {
-    "content": "Test end-to-end",
-    "status": "pending"
+    "content": "End-to-end test: Warehouse Complete -> Owner sees -> Owner forwards -> Data Entry sees",
+    "status": "completed"
   }
 ]

@@ -46,6 +46,7 @@ export default function CourierDetailsModal({ courier, onClose, onUpdated, onDel
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // editable state
   const [company, setCompany] = useState("");
@@ -105,7 +106,7 @@ export default function CourierDetailsModal({ courier, onClose, onUpdated, onDel
     setProducts((arr) => arr.map((p, i) => (i === idx ? { ...p, [field]: val } : p)));
 
   const handleDeleteCourier = async () => {
-    if (!window.confirm(`Delete courier ${courier.courier_number}? This cannot be undone.`)) return;
+    setConfirmDelete(false);
     setDeletingId(true);
     try {
       await axios.delete(`${API}/couriers/${courier.id}`, { headers: authHeaders() });
@@ -362,7 +363,7 @@ export default function CourierDetailsModal({ courier, onClose, onUpdated, onDel
               <button
                 type="button"
                 data-testid="courier-delete-btn"
-                onClick={handleDeleteCourier}
+                onClick={() => setConfirmDelete(true)}
                 disabled={deletingId}
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-neutral-200 text-sm text-red-600 hover:bg-red-50 hover:border-red-200 disabled:opacity-60"
               >
@@ -430,6 +431,62 @@ export default function CourierDetailsModal({ courier, onClose, onUpdated, onDel
           )}
         </div>
       </div>
+
+      {/* Inline delete confirmation overlay (window.confirm blocked in iframe) */}
+      {confirmDelete && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-neutral-900/50 backdrop-blur-sm p-4"
+          onClick={() => !deletingId && setConfirmDelete(false)}
+          data-testid="confirm-delete-overlay"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm border border-neutral-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-lg bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-base font-semibold text-neutral-900">
+                    Delete courier?
+                  </div>
+                  <div className="text-xs text-neutral-500 mt-0.5">
+                    <span className="font-mono">{courier.courier_number}</span>{" "}
+                    will be permanently removed. This cannot be undone.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 p-4 border-t border-neutral-100 bg-neutral-50/40 rounded-b-2xl">
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                disabled={deletingId}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium text-neutral-700 hover:bg-white border border-transparent hover:border-neutral-200"
+                data-testid="confirm-delete-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteCourier}
+                disabled={deletingId}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                data-testid="confirm-delete-yes"
+              >
+                {deletingId ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5" />
+                )}
+                Yes, delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
