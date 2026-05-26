@@ -1,22 +1,18 @@
 [
   {
-    "content": "Backend: add ready_for_verification + verification_done + final_price fields, auto-set ready when all DE items done, add Verification endpoints",
+    "content": "Backend: filter /data-entry/couriers to exclude ready_for_verification; extend ProductOut and CourierItemDataEntry with PO, batch, MRP, discount, IGST, expiry, remarks",
     "status": "completed"
   },
   {
-    "content": "Frontend Verification: build full StaffDashboard with per-product final-price calculation + manual override + complete-courier action",
+    "content": "Data Entry modal: add new fields (PO, batch, MRP, discount %, IGST %, expiry, remarks)",
     "status": "completed"
   },
   {
-    "content": "Frontend Data Entry: when last item is data_entry_done, show 'sent to Verification' state in DataEntry UI",
+    "content": "Redesign DataEntryDashboard to a flat scalable courier-row list with search/pagination + per-courier full-screen items modal",
     "status": "completed"
   },
   {
-    "content": "Owner analytics: add a 'In Verification' / 'Completed' counters",
-    "status": "completed"
-  },
-  {
-    "content": "End-to-end test: DE complete -> Verification sees -> per-item final price + manual override -> Approve courier complete",
+    "content": "E2E test: data entry done -> courier disappears from DE -> appears in Verification with new fields preserved",
     "status": "completed"
   }
 ]

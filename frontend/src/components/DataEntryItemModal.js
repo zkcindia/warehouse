@@ -17,6 +17,10 @@ import {
   Package,
   Tag,
   AlertTriangle,
+  FileText,
+  Layers,
+  StickyNote,
+  CalendarOff,
 } from "lucide-react";
 
 const TRANSPORT_OPTIONS = ["Road", "Air", "Train", "Courier", "Self pickup", "Other"];
@@ -42,6 +46,13 @@ export default function DataEntryItemModal({ courier, item, onClose, onUpdated }
     gst_amount: "",
     hsn_code: "",
     unit: "",
+    po_number: "",
+    batch_number: "",
+    mrp: "",
+    discount_percent: "",
+    igst_percent: "",
+    expiry_date: "",
+    remarks: "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -60,6 +71,13 @@ export default function DataEntryItemModal({ courier, item, onClose, onUpdated }
       gst_amount: asNumOrEmpty(item.gst_amount),
       hsn_code: item.hsn_code || "",
       unit: item.unit || "",
+      po_number: item.po_number || "",
+      batch_number: item.batch_number || "",
+      mrp: asNumOrEmpty(item.mrp),
+      discount_percent: asNumOrEmpty(item.discount_percent),
+      igst_percent: asNumOrEmpty(item.igst_percent),
+      expiry_date: item.expiry_date || "",
+      remarks: item.remarks || "",
     });
   }, [item]);
 
@@ -86,6 +104,14 @@ export default function DataEntryItemModal({ courier, item, onClose, onUpdated }
     gst_amount: form.gst_amount === "" ? null : Number(form.gst_amount),
     hsn_code: form.hsn_code.trim() || null,
     unit: form.unit.trim() || null,
+    po_number: form.po_number.trim() || null,
+    batch_number: form.batch_number.trim() || null,
+    mrp: form.mrp === "" ? null : Number(form.mrp),
+    discount_percent:
+      form.discount_percent === "" ? null : Number(form.discount_percent),
+    igst_percent: form.igst_percent === "" ? null : Number(form.igst_percent),
+    expiry_date: form.expiry_date.trim() || null,
+    remarks: form.remarks.trim() || null,
   });
 
   const save = async ({ markDone = null } = {}) => {
@@ -258,6 +284,39 @@ export default function DataEntryItemModal({ courier, item, onClose, onUpdated }
             </div>
           </Section>
 
+          {/* Identifiers (PO / Batch / Expiry) */}
+          <Section title="Identifiers & Batch">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Field label="PO number" icon={FileText}>
+                <input
+                  value={form.po_number}
+                  onChange={(e) => setField("po_number", e.target.value)}
+                  placeholder="PO-2026-001"
+                  data-testid="de-po-number"
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Batch / Lot number" icon={Layers}>
+                <input
+                  value={form.batch_number}
+                  onChange={(e) => setField("batch_number", e.target.value)}
+                  placeholder="e.g. BATCH-A1"
+                  data-testid="de-batch-number"
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Expiry date (if applicable)" icon={CalendarOff}>
+                <input
+                  type="date"
+                  value={form.expiry_date}
+                  onChange={(e) => setField("expiry_date", e.target.value)}
+                  data-testid="de-expiry-date"
+                  className={inputCls}
+                />
+              </Field>
+            </div>
+          </Section>
+
           {/* Tax / Cost */}
           <Section title="Tax & Cost details">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -299,6 +358,31 @@ export default function DataEntryItemModal({ courier, item, onClose, onUpdated }
                   className={inputCls}
                 />
               </Field>
+              <Field label="MRP" icon={IndianRupee}>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.mrp}
+                  onChange={(e) => setField("mrp", e.target.value)}
+                  placeholder="0.00"
+                  data-testid="de-mrp"
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Discount %" icon={Percent}>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={form.discount_percent}
+                  onChange={(e) => setField("discount_percent", e.target.value)}
+                  placeholder="0"
+                  data-testid="de-discount-percent"
+                  className={inputCls}
+                />
+              </Field>
               <Field label="GST %" icon={Percent}>
                 <input
                   type="number"
@@ -309,6 +393,19 @@ export default function DataEntryItemModal({ courier, item, onClose, onUpdated }
                   onChange={(e) => setField("gst_percent", e.target.value)}
                   placeholder="18"
                   data-testid="de-gst-percent"
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="IGST % (inter-state)" icon={Percent}>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={form.igst_percent}
+                  onChange={(e) => setField("igst_percent", e.target.value)}
+                  placeholder="0"
+                  data-testid="de-igst-percent"
                   className={inputCls}
                 />
               </Field>
@@ -325,6 +422,20 @@ export default function DataEntryItemModal({ courier, item, onClose, onUpdated }
                 />
               </Field>
             </div>
+          </Section>
+
+          {/* Remarks */}
+          <Section title="Remarks">
+            <Field label="Notes (optional)" icon={StickyNote}>
+              <textarea
+                value={form.remarks}
+                onChange={(e) => setField("remarks", e.target.value)}
+                placeholder="Any extra notes about this item, supplier, special handling, etc."
+                rows={3}
+                data-testid="de-remarks"
+                className={`${inputCls} resize-none`}
+              />
+            </Field>
           </Section>
         </div>
 

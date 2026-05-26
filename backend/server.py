@@ -109,6 +109,14 @@ class ProductOut(BaseModel):
     hsn_code: Optional[str] = None
     unit: Optional[str] = None
     data_entry_done: bool = False
+    # Extended purchase details
+    po_number: Optional[str] = None
+    batch_number: Optional[str] = None
+    mrp: Optional[float] = None
+    discount_percent: Optional[float] = None
+    igst_percent: Optional[float] = None
+    expiry_date: Optional[str] = None
+    remarks: Optional[str] = None
     # Verification fields
     cgst_per_unit: Optional[float] = None
     sgst_per_unit: Optional[float] = None
@@ -737,6 +745,13 @@ def courier_doc_to_out(doc: dict) -> dict:
             'hsn_code': p.get('hsn_code'),
             'unit': p.get('unit'),
             'data_entry_done': bool(p.get('data_entry_done', False)),
+            'po_number': p.get('po_number'),
+            'batch_number': p.get('batch_number'),
+            'mrp': float(p['mrp']) if p.get('mrp') is not None else None,
+            'discount_percent': float(p['discount_percent']) if p.get('discount_percent') is not None else None,
+            'igst_percent': float(p['igst_percent']) if p.get('igst_percent') is not None else None,
+            'expiry_date': p.get('expiry_date'),
+            'remarks': p.get('remarks'),
             # Verification fields
             'cgst_per_unit': cgst_per_unit,
             'sgst_per_unit': sgst_per_unit,
@@ -1407,10 +1422,23 @@ async def owner_analytics(user: dict = Depends(require_role(ROLE_OWNER))):
 async def list_data_entry_couriers(
     user: dict = Depends(require_role(ROLE_OWNER, ROLE_DATA_ENTRY)),
 ):
+    """
+    Data Entry queue:
+    - sent_to_data_entry: True (Owner forwarded)
+    - NOT yet ready_for_verification (i.e. still has at least 1 item pending DE)
+    Couriers automatically disappear once all items are marked data_entry_done.
+    """
     cursor = db.couriers.find(
-        {'sent_to_data_entry': True}, {'_id': 0}
+        {
+            'sent_to_data_entry': True,
+            '$or': [
+                {'ready_for_verification': {'$exists': False}},
+                {'ready_for_verification': False},
+            ],
+        },
+        {'_id': 0},
     ).sort('sent_to_data_entry_at', -1)
-    docs = await cursor.to_list(1000)
+    docs = await cursor.to_list(2000)
     return [courier_doc_to_out(d) for d in docs]
 
 
@@ -1427,6 +1455,14 @@ class CourierItemDataEntry(BaseModel):
     gst_amount: Optional[float] = Field(default=None, ge=0)
     hsn_code: Optional[str] = Field(default=None, max_length=40)
     unit: Optional[str] = Field(default=None, max_length=20)
+    # Extended purchase details
+    po_number: Optional[str] = Field(default=None, max_length=80)
+    batch_number: Optional[str] = Field(default=None, max_length=80)
+    mrp: Optional[float] = Field(default=None, ge=0)
+    discount_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    igst_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    expiry_date: Optional[str] = Field(default=None, max_length=40)
+    remarks: Optional[str] = Field(default=None, max_length=500)
     data_entry_done: Optional[bool] = None
 
 
@@ -1454,13 +1490,14 @@ async def update_item_data_entry(
     for f in [
         'supplier', 'invoice_number', 'invoice_date',
         'transportation_method', 'transporter_name', 'hsn_code', 'unit',
+        'po_number', 'batch_number', 'expiry_date', 'remarks',
     ]:
         v = getattr(body, f)
         if v is not None:
             update_fields[f] = (v.strip() if isinstance(v, str) else v) or None
     for f in [
         'transportation_cost', 'gst_percent', 'total_invoice_amount',
-        'cost_per_unit', 'gst_amount',
+        'cost_per_unit', 'gst_amount', 'mrp', 'discount_percent', 'igst_percent',
     ]:
         v = getattr(body, f)
         if v is not None:
