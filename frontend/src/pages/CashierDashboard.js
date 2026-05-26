@@ -26,6 +26,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
+import RejectedCourierEditModal from "@/components/RejectedCourierEditModal";
 
 const MAX_IMG_BYTES = 4 * 1024 * 1024;
 
@@ -77,6 +78,7 @@ export default function CashierDashboard() {
   const [savedSession, setSavedSession] = useState([]);
   const [rejected, setRejected] = useState([]);
   const [resolvingId, setResolvingId] = useState(null);
+  const [editingRejected, setEditingRejected] = useState(null);
 
   const loadRejected = useCallback(async () => {
     try {
@@ -305,20 +307,32 @@ export default function CashierDashboard() {
                       </div>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => resolveRejection(c)}
-                    disabled={resolvingId === c.id}
-                    data-testid={`resolve-${c.courier_number}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-60 shrink-0"
-                  >
-                    {resolvingId === c.id ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                    )}
-                    Mark resolved
-                  </button>
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setEditingRejected(c)}
+                      data-testid={`edit-resend-${c.courier_number}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-900 text-white text-xs font-medium hover:bg-neutral-800"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edit &amp; resend
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => resolveRejection(c)}
+                      disabled={resolvingId === c.id}
+                      data-testid={`resolve-${c.courier_number}`}
+                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+                      title="Resend without changes"
+                    >
+                      {resolvingId === c.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="w-3 h-3" />
+                      )}
+                      Resend without changes
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -619,6 +633,13 @@ export default function CashierDashboard() {
           </div>
         )}
       </div>
+      <RejectedCourierEditModal
+        courier={editingRejected}
+        onClose={() => setEditingRejected(null)}
+        onResent={(updated) => {
+          setRejected((arr) => arr.filter((r) => r.id !== updated.id));
+        }}
+      />
     </DashboardShell>
   );
 }
