@@ -40,7 +40,7 @@ function fileToDataURL(file) {
   });
 }
 
-export default function CourierDetailsModal({ courier, onClose, onUpdated, onDeleted }) {
+export default function CourierDetailsModal({ courier, onClose, onUpdated, onDeleted, readOnly = false, initialEdit = false }) {
   const { API, authHeaders } = useAuth();
   const fileRef = useRef(null);
   const [editing, setEditing] = useState(false);
@@ -65,8 +65,8 @@ export default function CourierDetailsModal({ courier, onClose, onUpdated, onDel
     setPaymentMode(courier.payment_made && courier.payment_mode ? courier.payment_mode : "none");
     setProducts((courier.products || []).map((p) => ({ name: p.name, quantity: String(p.quantity) })));
     setOrig(courier);
-    setEditing(false);
-  }, [courier]);
+    setEditing(!!initialEdit && !readOnly);
+  }, [courier, initialEdit, readOnly]);
 
   if (!courier) return null;
 
@@ -384,14 +384,16 @@ export default function CourierDetailsModal({ courier, onClose, onUpdated, onDel
                 >
                   Close
                 </button>
-                <button
-                  type="button"
-                  data-testid="courier-edit-btn"
-                  onClick={() => setEditing(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800"
-                >
-                  <Pencil className="w-4 h-4" /> Edit
-                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    data-testid="courier-edit-btn"
+                    onClick={() => setEditing(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800"
+                  >
+                    <Pencil className="w-4 h-4" /> Edit
+                  </button>
+                )}
               </div>
             </>
           ) : (

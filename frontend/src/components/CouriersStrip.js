@@ -1,59 +1,65 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import CourierDetailsModal from "@/components/CourierDetailsModal";
 import CourierChecklistModal from "@/components/CourierChecklistModal";
-import CourierItemsModal from "@/components/CourierItemsModal";
+import AddInventoryItemDialog from "@/components/AddInventoryItemDialog";
+import CourierSOPModal from "@/components/CourierSOPModal";
 import { checklistProgress } from "@/lib/checklist";
+import { toast } from "sonner";
 import {
   Truck,
   Loader2,
   RefreshCw,
-  CircleCheck,
-  CircleAlert,
-  Smartphone,
-  CreditCard,
-  Wallet,
-  ChevronRight,
+  Eye,
+  Pencil,
   ClipboardCheck,
-  Package,
-  Send,
+  PackagePlus,
+  FileText,
   CheckCircle2,
+  Package,
+  Image as ImageIcon,
+  Check,
+  Lock,
 } from "lucide-react";
-import { toast } from "sonner";
 
-function PaymentBadge({ paid, mode }) {
-  if (!paid) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
-        <CircleAlert className="w-3 h-3" /> Unpaid
-      </span>
-    );
-  }
-  const Icon = mode === "upi" ? Smartphone : mode === "card" ? CreditCard : Wallet;
-  const label = mode === "upi" ? "UPI" : mode === "card" ? "Card" : "Cash";
+function ActionBtn({
+  icon: Icon,
+  label,
+  onClick,
+  disabled,
+  variant = "outline",
+  loading = false,
+  testId,
+}) {
+  const variants = {
+    outline:
+      "bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50",
+    primary: "bg-blue-600 border border-blue-600 text-white hover:bg-blue-700",
+    accept: "bg-emerald-600 border border-emerald-600 text-white hover:bg-emerald-700",
+    accepted:
+      "bg-emerald-50 border border-emerald-200 text-emerald-700 cursor-default",
+    complete: "bg-emerald-50 border border-emerald-200 text-emerald-700",
+    sop: "bg-neutral-900 border border-neutral-900 text-white hover:bg-neutral-800",
+  };
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-      <CircleCheck className="w-3 h-3" /> Paid · <Icon className="w-3 h-3" /> {label}
-    </span>
-  );
-}
-
-function ChecklistBadge({ checklist }) {
-  const { done, total, complete } = checklistProgress(checklist);
-  return (
-    <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${
-        complete
-          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-          : done > 0
-          ? "bg-blue-50 text-blue-700 border-blue-200"
-          : "bg-neutral-50 text-neutral-600 border-neutral-200"
-      }`}
-      data-testid="card-checklist-badge"
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled || loading}
+      data-testid={testId}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+        variants[variant]
+      } ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
+      title={label}
     >
-      <ClipboardCheck className="w-3 h-3" /> {done}/{total}
-    </span>
+      {loading ? (
+        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+      ) : (
+        <Icon className="w-3.5 h-3.5" />
+      )}
+      <span className="hidden sm:inline">{label}</span>
+    </button>
   );
 }
 
@@ -61,15 +67,21 @@ export default function CouriersStrip({ onCouriersChange }) {
   const { API, authHeaders } = useAuth();
   const [couriers, setCouriers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  // Modal states
+  const [viewing, setViewing] = useState(null);
+  const [editing, setEditing] = useState(null);
   const [checklistFor, setChecklistFor] = useState(null);
   const [itemsFor, setItemsFor] = useState(null);
-  const [sendingId, setSendingId] = useState(null);
+  const [sopFor, setSopFor] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API}/couriers`, { headers: authHeaders() });
+      const res = await axios.get(`${API}/couriers`, {
+        headers: authHeaders(),
+      });
       setCouriers(res.data || []);
     } catch (e) {
       // silent
@@ -87,45 +99,36 @@ export default function CouriersStrip({ onCouriersChange }) {
     onCouriersChange?.();
   };
 
-  const handleToggleDataEntry = async (c) => {
-    const sending = !c.sent_to_data_entry;
-    if (
-      c.sent_to_data_entry &&
-      !window.confirm(`Recall ${c.courier_number} from Data Entry?`)
-    ) {
-      return;
-    }
-    setSendingId(c.id);
+  const handleAccept = async (c) => {
+    setBusyId(c.id);
     try {
       const res = await axios.patch(
-        `${API}/couriers/${c.id}/send-to-data-entry`,
-        { sent: sending },
+        `${API}/couriers/${c.id}/accept`,
+        { accepted: true },
         { headers: authHeaders() }
       );
-      toast.success(
-        sending
-          ? `${c.courier_number} sent to Data Entry`
-          : `${c.courier_number} recalled from Data Entry`
-      );
+      toast.success(`${c.courier_number} accepted`);
       applyUpdate(res.data);
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Failed to update");
+      toast.error(e?.response?.data?.detail || "Failed to accept");
     } finally {
-      setSendingId(null);
+      setBusyId(null);
     }
   };
 
   return (
-    <div className="bg-white border border-neutral-200 rounded-2xl p-5 mb-5">
+    <div className="bg-white border border-neutral-200 rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-lg bg-purple-600 text-white flex items-center justify-center">
             <Truck className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-base font-semibold text-neutral-900">Couriers from cashier</div>
+            <div className="text-base font-semibold text-neutral-900">
+              Couriers from cashier
+            </div>
             <div className="text-xs text-neutral-500">
-              Click a card to view details, or use the checklist button below.
+              Accept a courier first → checklist → items → SOP review
             </div>
           </div>
         </div>
@@ -133,7 +136,6 @@ export default function CouriersStrip({ onCouriersChange }) {
           type="button"
           onClick={load}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50"
-          title="Refresh"
           data-testid="couriers-refresh-btn"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -142,124 +144,143 @@ export default function CouriersStrip({ onCouriersChange }) {
       </div>
 
       {loading ? (
-        <div className="py-6 flex items-center justify-center text-neutral-400 text-sm gap-2">
+        <div className="py-8 flex items-center justify-center text-neutral-400 text-sm gap-2">
           <Loader2 className="w-4 h-4 animate-spin" /> Loading couriers…
         </div>
       ) : couriers.length === 0 ? (
-        <div className="py-8 text-center border border-dashed border-neutral-200 rounded-xl">
+        <div className="py-10 text-center border border-dashed border-neutral-200 rounded-xl">
           <div className="w-10 h-10 rounded-lg bg-neutral-100 text-neutral-400 mx-auto flex items-center justify-center mb-2">
             <Truck className="w-5 h-5" />
           </div>
-          <div className="text-sm text-neutral-600 font-medium">No couriers yet</div>
+          <div className="text-sm text-neutral-600 font-medium">
+            No couriers yet
+          </div>
           <div className="text-xs text-neutral-400 mt-0.5">
             When Cashier logs a courier, it will show here.
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="border border-neutral-100 rounded-xl divide-y divide-neutral-100 overflow-hidden">
           {couriers.map((c) => {
             const cp = checklistProgress(c.checklist);
+            const accepted = !!c.accepted;
+            const checklistDone = cp.complete;
+            const hasItems = (c.products?.length || 0) > 0;
+            const photo = c.slip_photo || c.package_photo;
             return (
               <div
                 key={c.id}
-                data-testid={`courier-card-${c.courier_number}`}
-                className="group bg-white border border-neutral-200 rounded-xl p-4 hover:border-neutral-900 hover:shadow-md transition-all flex flex-col"
+                data-testid={`courier-row-${c.courier_number}`}
+                className={`flex items-center gap-3 px-4 py-3 transition-colors ${
+                  accepted ? "bg-white" : "bg-neutral-50/40"
+                } hover:bg-neutral-50`}
               >
-                {/* Clickable details area */}
-                <button
-                  type="button"
-                  onClick={() => setOpen(c)}
-                  data-testid={`courier-pill-${c.courier_number}`}
-                  className="text-left w-full"
-                >
-                  {/* Header row */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-neutral-900 text-white text-xs font-bold font-mono shrink-0">
-                        {c.courier_number.replace("CRX-", "")}
-                      </span>
-                      <div className="min-w-0">
-                        <div className="text-sm font-bold text-neutral-900 font-mono leading-tight">
-                          {c.courier_number}
-                        </div>
-                        {c.courier_company ? (
-                          <div className="text-[11px] text-neutral-500 truncate flex items-center gap-1">
-                            <Truck className="w-3 h-3" /> {c.courier_company}
-                          </div>
-                        ) : (
-                          <div className="text-[11px] text-neutral-400 italic">No company</div>
-                        )}
-                      </div>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-neutral-300 group-hover:text-neutral-900 transition-colors shrink-0" />
-                  </div>
-
-                  {/* Payment + Checklist badges */}
-                  <div className="border-t border-neutral-100 pt-3 flex items-center justify-between gap-2">
-                    <PaymentBadge paid={c.payment_made} mode={c.payment_mode} />
-                    <ChecklistBadge checklist={c.checklist} />
-                  </div>
-
-                  {/* Items count (visible when checklist complete or items exist) */}
-                  {(cp.complete || (c.products && c.products.length > 0)) && (
-                    <div className="mt-2 inline-flex items-center gap-1 text-[11px] text-neutral-500">
-                      <Package className="w-3 h-3" />
-                      {(c.products && c.products.length) || 0} item
-                      {(c.products?.length || 0) === 1 ? "" : "s"} ·{" "}
-                      <span className="font-semibold text-neutral-700">
-                        {c.total_quantity || 0}
-                      </span>{" "}
-                      units
+                {/* Left: photo + id + quantity */}
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  {photo ? (
+                    <img
+                      src={photo}
+                      alt={c.courier_number}
+                      className="w-12 h-12 rounded-lg object-cover border border-neutral-100 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg bg-neutral-50 border border-neutral-100 text-neutral-300 flex items-center justify-center shrink-0">
+                      <ImageIcon className="w-5 h-5" />
                     </div>
                   )}
-                </button>
-
-                {/* Action buttons */}
-                <div className="mt-3 space-y-2">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setChecklistFor(c);
-                    }}
-                    data-testid={`open-checklist-btn-${c.courier_number}`}
-                    className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
-                      cp.complete
-                        ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                        : "bg-neutral-900 border-neutral-900 text-white hover:bg-neutral-800"
-                    }`}
-                  >
-                    <ClipboardCheck className="w-4 h-4" />
-                    {cp.complete ? "Checklist complete" : "Open checklist"}
-                  </button>
-
-                  {/* Send to Data Entry — only after items added */}
-                  {cp.complete && (c.products?.length || 0) > 0 && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleDataEntry(c);
-                      }}
-                      disabled={sendingId === c.id}
-                      data-testid={`send-data-entry-btn-${c.courier_number}`}
-                      className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
-                        c.sent_to_data_entry
-                          ? "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
-                          : "bg-blue-600 border-blue-600 text-white hover:bg-blue-700"
-                      } disabled:opacity-60`}
-                    >
-                      {sendingId === c.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : c.sent_to_data_entry ? (
-                        <CheckCircle2 className="w-4 h-4" />
-                      ) : (
-                        <Send className="w-4 h-4" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-mono font-semibold text-neutral-900">
+                        {c.courier_number}
+                      </span>
+                      {accepted && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <Check className="w-3 h-3" /> Accepted
+                        </span>
                       )}
-                      {c.sent_to_data_entry
-                        ? `Sent to Data Entry · ${c.data_entry_done_count || 0}/${c.products.length}`
-                        : "Send to Data Entry"}
-                    </button>
+                      {c.sent_to_data_entry && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                          <Lock className="w-3 h-3" /> Sent to DE
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5 text-[12px] text-neutral-500">
+                      <span className="inline-flex items-center gap-1">
+                        <Package className="w-3 h-3" /> {c.num_packages} pkgs
+                      </span>
+                      {c.courier_company && (
+                        <span className="inline-flex items-center gap-1 truncate">
+                          <Truck className="w-3 h-3" /> {c.courier_company}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: progressive action buttons */}
+                <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                  <ActionBtn
+                    icon={Eye}
+                    label="View"
+                    onClick={() => setViewing(c)}
+                    disabled={!accepted}
+                    testId={`row-view-${c.courier_number}`}
+                  />
+
+                  {!accepted ? (
+                    <ActionBtn
+                      icon={Check}
+                      label="Accept"
+                      onClick={() => handleAccept(c)}
+                      loading={busyId === c.id}
+                      variant="accept"
+                      testId={`row-accept-${c.courier_number}`}
+                    />
+                  ) : (
+                    <>
+                      <ActionBtn
+                        icon={Pencil}
+                        label="Edit"
+                        onClick={() => setEditing(c)}
+                        disabled={c.sent_to_data_entry}
+                        testId={`row-edit-${c.courier_number}`}
+                      />
+                      <ActionBtn
+                        icon={ClipboardCheck}
+                        label={
+                          checklistDone
+                            ? "Checklist ✓"
+                            : `Checklist ${cp.done}/${cp.total}`
+                        }
+                        onClick={() => setChecklistFor(c)}
+                        variant={checklistDone ? "complete" : "primary"}
+                        disabled={c.sent_to_data_entry}
+                        testId={`row-checklist-${c.courier_number}`}
+                      />
+                      {checklistDone && (
+                        <ActionBtn
+                          icon={PackagePlus}
+                          label={
+                            hasItems
+                              ? `Items (${c.products.length})`
+                              : "Item list"
+                          }
+                          onClick={() => setItemsFor(c)}
+                          variant={hasItems ? "complete" : "primary"}
+                          disabled={c.sent_to_data_entry}
+                          testId={`row-items-${c.courier_number}`}
+                        />
+                      )}
+                      {checklistDone && hasItems && (
+                        <ActionBtn
+                          icon={FileText}
+                          label="SOP"
+                          onClick={() => setSopFor(c)}
+                          variant="sop"
+                          testId={`row-sop-${c.courier_number}`}
+                        />
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -268,14 +289,26 @@ export default function CouriersStrip({ onCouriersChange }) {
         </div>
       )}
 
+      {/* Modals */}
       <CourierDetailsModal
-        courier={open}
-        onClose={() => setOpen(null)}
+        courier={viewing}
+        onClose={() => setViewing(null)}
         onUpdated={applyUpdate}
         onDeleted={(id) => {
           setCouriers((arr) => arr.filter((c) => c.id !== id));
           onCouriersChange?.();
         }}
+        readOnly
+      />
+      <CourierDetailsModal
+        courier={editing}
+        onClose={() => setEditing(null)}
+        onUpdated={applyUpdate}
+        onDeleted={(id) => {
+          setCouriers((arr) => arr.filter((c) => c.id !== id));
+          onCouriersChange?.();
+        }}
+        initialEdit
       />
       <CourierChecklistModal
         courier={checklistFor}
@@ -287,9 +320,16 @@ export default function CouriersStrip({ onCouriersChange }) {
           setItemsFor(updated);
         }}
       />
-      <CourierItemsModal
-        courier={itemsFor}
+      <AddInventoryItemDialog
+        open={!!itemsFor}
+        couriers={itemsFor ? [itemsFor] : []}
+        lockToCourierId={itemsFor?.id || null}
         onClose={() => setItemsFor(null)}
+        onAdded={applyUpdate}
+      />
+      <CourierSOPModal
+        courier={sopFor}
+        onClose={() => setSopFor(null)}
         onUpdated={applyUpdate}
       />
     </div>

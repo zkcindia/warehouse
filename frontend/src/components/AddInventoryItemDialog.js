@@ -51,7 +51,7 @@ const blankRow = () => ({
   damagedCount: "",
 });
 
-export default function AddInventoryItemDialog({ open, couriers, onClose, onAdded }) {
+export default function AddInventoryItemDialog({ open, couriers, lockToCourierId, onClose, onAdded }) {
   const { API, authHeaders } = useAuth();
 
   const eligible = useMemo(
@@ -69,7 +69,7 @@ export default function AddInventoryItemDialog({ open, couriers, onClose, onAdde
 
   useEffect(() => {
     if (!open) return;
-    setCourierId(eligible[0]?.id || "");
+    setCourierId(lockToCourierId || eligible[0]?.id || "");
     setRows([blankRow()]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -231,8 +231,9 @@ export default function AddInventoryItemDialog({ open, couriers, onClose, onAdde
                 <select
                   value={courierId}
                   onChange={(e) => setCourierId(e.target.value)}
+                  disabled={!!lockToCourierId}
                   data-testid="inv-courier-select"
-                  className="mt-1 w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                  className="mt-1 w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-neutral-900 disabled:bg-neutral-50 disabled:text-neutral-600"
                 >
                   {eligible.map((c) => (
                     <option key={c.id} value={c.id}>

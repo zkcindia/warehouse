@@ -1,26 +1,22 @@
 [
   {
-    "content": "Backend: Add sent_to_data_entry flag + toggle endpoint",
+    "content": "Backend: Add 'accepted' flag + PATCH /api/couriers/{cid}/accept endpoint",
     "status": "completed"
   },
   {
-    "content": "Backend: Extend product schema with purchase/finance fields (supplier, invoice, GST, HSN, etc.)",
+    "content": "Frontend: Restructure CouriersStrip from grid cards to full-width rows",
     "status": "completed"
   },
   {
-    "content": "Backend: GET /api/data-entry/couriers (flagged only) + PATCH /api/couriers/{cid}/items/{item_id} update",
+    "content": "Frontend: Implement progressive action buttons (View, Accept, Edit, Checklist, Items, SOP)",
     "status": "completed"
   },
   {
-    "content": "Frontend: Add 'Send to Data Entry' button on Warehouse courier cards",
+    "content": "Frontend: Build SOP summary modal (checklist details + product details + confirm/send-to-data-entry)",
     "status": "completed"
   },
   {
-    "content": "Frontend: Build DataEntryDashboard with flagged courier list + item edit modal",
-    "status": "completed"
-  },
-  {
-    "content": "Frontend: Wire route /dashboard/data-entry to new page",
+    "content": "Frontend: Lock Add Items dialog to single courier when opened from row",
     "status": "completed"
   },
   {

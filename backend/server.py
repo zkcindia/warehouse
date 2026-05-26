@@ -645,6 +645,9 @@ class CourierOut(BaseModel):
     payment_mode: Optional[str] = None
     total_quantity: int
     checklist: dict
+    accepted: bool = False
+    accepted_at: Optional[str] = None
+    accepted_by: Optional[str] = None
     sent_to_data_entry: bool = False
     data_entry_done_count: int = 0
     created_at: datetime
@@ -705,6 +708,9 @@ def courier_doc_to_out(doc: dict) -> dict:
         'payment_mode': doc.get('payment_mode'),
         'total_quantity': total_qty,
         'checklist': _normalize_checklist(doc.get('checklist')),
+        'accepted': bool(doc.get('accepted', False)),
+        'accepted_at': doc.get('accepted_at'),
+        'accepted_by': doc.get('accepted_by'),
         'sent_to_data_entry': bool(doc.get('sent_to_data_entry', False)),
         'data_entry_done_count': data_entry_done_count,
         'created_at': created_at,
@@ -876,6 +882,32 @@ async def delete_courier_product(cid: str, product_id: str, user: dict = Depends
 class ChecklistUpdate(BaseModel):
     checklist: dict
 
+
+class AcceptCourierBody(BaseModel):
+    accepted: bool = True
+
+
+@api_router.patch("/couriers/{cid}/accept", response_model=CourierOut)
+async def accept_courier(
+    cid: str,
+    body: AcceptCourierBody,
+    user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE)),
+):
+    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Courier entry not found.")
+    if doc.get('sop_complete'):
+        raise HTTPException(status_code=400, detail="Courier is already SOP-completed and locked.")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    update = {
+        'accepted': bool(body.accepted),
+        'accepted_at': now_iso if body.accepted else None,
+        'accepted_by': user['full_name'] if body.accepted else None,
+    }
+    await db.couriers.update_one({'id': cid}, {'$set': update})
+    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    return courier_doc_to_out(updated)
+
 @api_router.patch("/couriers/{cid}/checklist", response_model=CourierOut)
 async def update_courier_checklist(
     cid: str,
@@ -885,6 +917,8 @@ async def update_courier_checklist(
     doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Courier entry not found.")
+    if not doc.get('accepted'):
+        raise HTTPException(status_code=400, detail="Accept the courier before updating its checklist.")
     normalized = _normalize_checklist(body.checklist)
     await db.couriers.update_one(
         {'id': cid},
