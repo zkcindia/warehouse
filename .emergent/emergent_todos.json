@@ -1,22 +1,22 @@
 [
   {
-    "content": "Backend: add sent_to_owner field, update SOP send route to set sent_to_owner instead of sent_to_data_entry, add Owner forward endpoint, update DE filter",
+    "content": "Backend: add ready_for_verification + verification_done + final_price fields, auto-set ready when all DE items done, add Verification endpoints",
     "status": "completed"
   },
   {
-    "content": "Frontend Warehouse: simplify SOP modal - remove reject + send to DE, add Complete & send to Owner, show full product details",
+    "content": "Frontend Verification: build full StaffDashboard with per-product final-price calculation + manual override + complete-courier action",
     "status": "completed"
   },
   {
-    "content": "Frontend Owner: add pending review section with list-wise products and forward-to-DE action + analytics tiles",
+    "content": "Frontend Data Entry: when last item is data_entry_done, show 'sent to Verification' state in DataEntry UI",
     "status": "completed"
   },
   {
-    "content": "Frontend Data Entry: confirm it only shows owner-forwarded couriers (no change if filter is already sent_to_data_entry)",
+    "content": "Owner analytics: add a 'In Verification' / 'Completed' counters",
     "status": "completed"
   },
   {
-    "content": "End-to-end test: Warehouse Complete -> Owner sees -> Owner forwards -> Data Entry sees",
+    "content": "End-to-end test: DE complete -> Verification sees -> per-item final price + manual override -> Approve courier complete",
     "status": "completed"
   }
 ]

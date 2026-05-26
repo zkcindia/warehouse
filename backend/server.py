@@ -109,6 +109,18 @@ class ProductOut(BaseModel):
     hsn_code: Optional[str] = None
     unit: Optional[str] = None
     data_entry_done: bool = False
+    # Verification fields
+    cgst_per_unit: Optional[float] = None
+    sgst_per_unit: Optional[float] = None
+    transport_per_unit: Optional[float] = None
+    final_per_unit_auto: Optional[float] = None
+    final_total_auto: Optional[float] = None
+    final_price_manual: Optional[float] = None
+    final_price_source: Optional[str] = None
+    verification_done: bool = False
+    verification_notes: Optional[str] = None
+    verified_at: Optional[str] = None
+    verified_by: Optional[str] = None
     created_at: datetime
 
 class ParcelCreate(BaseModel):
@@ -656,7 +668,13 @@ class CourierOut(BaseModel):
     sent_to_owner: bool = False
     sent_to_owner_at: Optional[str] = None
     sent_to_owner_by: Optional[str] = None
+    ready_for_verification: bool = False
+    ready_for_verification_at: Optional[str] = None
+    verification_complete: bool = False
+    verification_complete_at: Optional[str] = None
+    verification_complete_by: Optional[str] = None
     data_entry_done_count: int = 0
+    verification_done_count: int = 0
     created_at: datetime
     created_by_name: str
 
@@ -670,10 +688,34 @@ def courier_doc_to_out(doc: dict) -> dict:
         p_created = p.get('created_at')
         if isinstance(p_created, str):
             p_created = datetime.fromisoformat(p_created)
+        qty = int(p.get('quantity', 0) or 0)
+        cost_per_unit = float(p['cost_per_unit']) if p.get('cost_per_unit') is not None else None
+        gst_percent = float(p['gst_percent']) if p.get('gst_percent') is not None else None
+        transportation_cost = float(p['transportation_cost']) if p.get('transportation_cost') is not None else None
+        # ---- Auto-calculated final price -------------------------------------
+        # Formula:
+        #   gst_amount_per_unit = cost_per_unit * gst_percent / 100
+        #   cgst = sgst = gst/2  (display-only convenience)
+        #   transport_per_unit = transportation_cost / quantity
+        #   final_per_unit_auto = cost_per_unit + gst_amount_per_unit + transport_per_unit
+        #   final_total_auto    = final_per_unit_auto * quantity
+        gst_amount_per_unit = (cost_per_unit * gst_percent / 100.0) if (cost_per_unit is not None and gst_percent is not None) else None
+        cgst_per_unit = (gst_amount_per_unit / 2.0) if gst_amount_per_unit is not None else None
+        sgst_per_unit = cgst_per_unit
+        transport_per_unit = (transportation_cost / qty) if (transportation_cost is not None and qty > 0) else None
+        final_per_unit_auto = None
+        if cost_per_unit is not None:
+            final_per_unit_auto = cost_per_unit
+            if gst_amount_per_unit is not None:
+                final_per_unit_auto += gst_amount_per_unit
+            if transport_per_unit is not None:
+                final_per_unit_auto += transport_per_unit
+        final_total_auto = (final_per_unit_auto * qty) if (final_per_unit_auto is not None and qty > 0) else None
+        # ---------------------------------------------------------------------
         products.append({
             'id': p['id'],
             'name': p['name'],
-            'quantity': p['quantity'],
+            'quantity': qty,
             'photo': p.get('photo'),
             'damaged': bool(p.get('damaged', False)),
             'damaged_count': int(p.get('damaged_count', 0)),
@@ -687,18 +729,31 @@ def courier_doc_to_out(doc: dict) -> dict:
             'invoice_date': p.get('invoice_date'),
             'transportation_method': p.get('transportation_method'),
             'transporter_name': p.get('transporter_name'),
-            'transportation_cost': float(p['transportation_cost']) if p.get('transportation_cost') is not None else None,
-            'gst_percent': float(p['gst_percent']) if p.get('gst_percent') is not None else None,
+            'transportation_cost': transportation_cost,
+            'gst_percent': gst_percent,
             'total_invoice_amount': float(p['total_invoice_amount']) if p.get('total_invoice_amount') is not None else None,
-            'cost_per_unit': float(p['cost_per_unit']) if p.get('cost_per_unit') is not None else None,
+            'cost_per_unit': cost_per_unit,
             'gst_amount': float(p['gst_amount']) if p.get('gst_amount') is not None else None,
             'hsn_code': p.get('hsn_code'),
             'unit': p.get('unit'),
             'data_entry_done': bool(p.get('data_entry_done', False)),
+            # Verification fields
+            'cgst_per_unit': cgst_per_unit,
+            'sgst_per_unit': sgst_per_unit,
+            'transport_per_unit': transport_per_unit,
+            'final_per_unit_auto': final_per_unit_auto,
+            'final_total_auto': final_total_auto,
+            'final_price_manual': float(p['final_price_manual']) if p.get('final_price_manual') is not None else None,
+            'final_price_source': p.get('final_price_source') or ('manual' if p.get('final_price_manual') is not None else ('auto' if final_per_unit_auto is not None else None)),
+            'verification_done': bool(p.get('verification_done', False)),
+            'verification_notes': p.get('verification_notes'),
+            'verified_at': p.get('verified_at'),
+            'verified_by': p.get('verified_by'),
             'created_at': p_created,
         })
     total_qty = sum(p['quantity'] for p in products)
     data_entry_done_count = sum(1 for p in products if p.get('data_entry_done'))
+    verification_done_count = sum(1 for p in products if p.get('verification_done'))
     return {
         'id': doc['id'],
         'courier_number': doc['courier_number'],
@@ -726,7 +781,13 @@ def courier_doc_to_out(doc: dict) -> dict:
         'sent_to_owner': bool(doc.get('sent_to_owner', False)),
         'sent_to_owner_at': doc.get('sent_to_owner_at'),
         'sent_to_owner_by': doc.get('sent_to_owner_by'),
+        'ready_for_verification': bool(doc.get('ready_for_verification', False)),
+        'ready_for_verification_at': doc.get('ready_for_verification_at'),
+        'verification_complete': bool(doc.get('verification_complete', False)),
+        'verification_complete_at': doc.get('verification_complete_at'),
+        'verification_complete_by': doc.get('verification_complete_by'),
         'data_entry_done_count': data_entry_done_count,
+        'verification_done_count': verification_done_count,
         'created_at': created_at,
         'created_by_name': doc.get('created_by_name', 'Cashier'),
     }
@@ -1305,6 +1366,14 @@ async def owner_analytics(user: dict = Depends(require_role(ROLE_OWNER))):
         ],
     })
     in_data_entry = await db.couriers.count_documents({'sent_to_data_entry': True})
+    ready_verification = await db.couriers.count_documents({
+        'ready_for_verification': True,
+        '$or': [
+            {'verification_complete': {'$exists': False}},
+            {'verification_complete': False},
+        ],
+    })
+    verified = await db.couriers.count_documents({'verification_complete': True})
     # Total items and total inventory value (best-effort, only for couriers with products)
     pipeline = [
         {'$unwind': {'path': '$products', 'preserveNullAndEmptyArrays': False}},
@@ -1325,6 +1394,8 @@ async def owner_analytics(user: dict = Depends(require_role(ROLE_OWNER))):
         'pending_warehouse': pending_warehouse,
         'pending_owner_review': pending_owner,
         'in_data_entry': in_data_entry,
+        'ready_verification': ready_verification,
+        'verified': verified,
         'rejected_open': rejected,
         'total_items': int(item_stats.get('items', 0)),
         'total_units': int(item_stats.get('units', 0)),
@@ -1403,7 +1474,129 @@ async def update_item_data_entry(
         'data_entry_updated_at': datetime.now(timezone.utc).isoformat(),
         'data_entry_updated_by': user['full_name'],
     }
+    # Detect if ALL items now have data_entry_done -> auto-flag courier ready for verification
+    all_done = bool(products) and all(p.get('data_entry_done') for p in products)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    set_payload = {'products': products}
+    if all_done and not doc.get('ready_for_verification'):
+        set_payload['ready_for_verification'] = True
+        set_payload['ready_for_verification_at'] = now_iso
+    elif not all_done and doc.get('ready_for_verification') and not doc.get('verification_complete'):
+        # If someone un-marks an item, reset readiness so DE can keep working
+        set_payload['ready_for_verification'] = False
+        set_payload['ready_for_verification_at'] = None
+    await db.couriers.update_one({'id': cid}, {'$set': set_payload})
+    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    return courier_doc_to_out(updated)
+
+
+# ============================================================
+# Verification workflow
+# ============================================================
+class VerificationItemBody(BaseModel):
+    final_price_manual: Optional[float] = Field(default=None, ge=0)
+    clear_manual: Optional[bool] = None  # if True, removes manual override and reverts to auto
+    verification_done: Optional[bool] = None
+    verification_notes: Optional[str] = Field(default=None, max_length=500)
+
+
+@api_router.get("/verification/couriers", response_model=List[CourierOut])
+async def list_verification_couriers(
+    user: dict = Depends(require_role(ROLE_OWNER, ROLE_VERIFICATION)),
+):
+    """Couriers where Data Entry is complete and ready for physical verification."""
+    cursor = db.couriers.find(
+        {'ready_for_verification': True},
+        {'_id': 0},
+    ).sort('ready_for_verification_at', -1)
+    docs = await cursor.to_list(1000)
+    return [courier_doc_to_out(d) for d in docs]
+
+
+@api_router.patch("/couriers/{cid}/items/{item_id}/verification", response_model=CourierOut)
+async def update_item_verification(
+    cid: str,
+    item_id: str,
+    body: VerificationItemBody,
+    user: dict = Depends(require_role(ROLE_OWNER, ROLE_VERIFICATION)),
+):
+    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Courier entry not found.")
+    if not doc.get('ready_for_verification'):
+        raise HTTPException(
+            status_code=400,
+            detail="This courier is not ready for verification yet.",
+        )
+    if doc.get('verification_complete'):
+        raise HTTPException(
+            status_code=400,
+            detail="Courier verification is already complete and locked.",
+        )
+    products = list(doc.get('products', []))
+    idx = next((i for i, p in enumerate(products) if p.get('id') == item_id), -1)
+    if idx == -1:
+        raise HTTPException(status_code=404, detail="Item not found.")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    new_item = {**products[idx]}
+    if body.clear_manual:
+        new_item['final_price_manual'] = None
+        new_item['final_price_source'] = 'auto'
+    elif body.final_price_manual is not None:
+        new_item['final_price_manual'] = float(body.final_price_manual)
+        new_item['final_price_source'] = 'manual'
+    if body.verification_notes is not None:
+        new_item['verification_notes'] = body.verification_notes.strip() or None
+    if body.verification_done is not None:
+        new_item['verification_done'] = bool(body.verification_done)
+        if body.verification_done:
+            new_item['verified_at'] = now_iso
+            new_item['verified_by'] = user['full_name']
+        else:
+            new_item['verified_at'] = None
+            new_item['verified_by'] = None
+    products[idx] = new_item
     await db.couriers.update_one({'id': cid}, {'$set': {'products': products}})
+    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    return courier_doc_to_out(updated)
+
+
+class CompleteVerificationBody(BaseModel):
+    complete: bool = True
+
+
+@api_router.patch("/couriers/{cid}/complete-verification", response_model=CourierOut)
+async def complete_courier_verification(
+    cid: str,
+    body: CompleteVerificationBody,
+    user: dict = Depends(require_role(ROLE_OWNER, ROLE_VERIFICATION)),
+):
+    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Courier entry not found.")
+    if not doc.get('ready_for_verification'):
+        raise HTTPException(
+            status_code=400,
+            detail="This courier is not ready for verification yet.",
+        )
+    if body.complete:
+        products = doc.get('products', [])
+        if not products:
+            raise HTTPException(status_code=400, detail="Courier has no items to verify.")
+        if not all(p.get('verification_done') for p in products):
+            missing = sum(1 for p in products if not p.get('verification_done'))
+            raise HTTPException(
+                status_code=400,
+                detail=f"Verify all items first ({missing} pending).",
+            )
+    now_iso = datetime.now(timezone.utc).isoformat()
+    update = {
+        'verification_complete': bool(body.complete),
+        'verification_complete_at': now_iso if body.complete else None,
+        'verification_complete_by': user['full_name'] if body.complete else None,
+    }
+    await db.couriers.update_one({'id': cid}, {'$set': update})
     updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
     return courier_doc_to_out(updated)
 

@@ -345,8 +345,22 @@ export default function OwnerDashboard() {
             icon={Lock}
             label="In Data Entry"
             value={loading ? "…" : a.in_data_entry ?? 0}
-            tone="success"
+            tone="info"
             testId="stat-in-data-entry"
+          />
+          <StatTile
+            icon={ClipboardList}
+            label="Ready for verification"
+            value={loading ? "…" : a.ready_verification ?? 0}
+            tone="warning"
+            testId="stat-ready-verification"
+          />
+          <StatTile
+            icon={CheckCircle2}
+            label="Verified"
+            value={loading ? "…" : a.verified ?? 0}
+            tone="success"
+            testId="stat-verified"
           />
           <StatTile
             icon={Layers}
