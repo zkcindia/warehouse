@@ -1,97 +1,147 @@
 # plan.md
 
 ## 1) Objectives
-- Deliver an MVP login flow for a Warehouse Management System with **4 roles**: Owner, Warehouse Staff, Data Entry Staff, Verification.
-- Use **Email + Password** auth (JWT + bcrypt), **no public signup**.
-- Login UX: **role selection landing** → role-specific login form → **role-specific placeholder dashboard**.
-- Owner can **create/list/delete staff accounts** (for the 3 staff roles).
-- Enforce **session persistence** and **role-based route protection**.
-- Modern minimal UI (shadcn/ui + Tailwind).
+- Deliver a role-based Warehouse Stock Management System (React + FastAPI + MongoDB) with **5 roles**:
+  - **Owner** (view-only dashboard)
+  - **Cashier** (log incoming/outgoing courier boxes; drafts → batch save)
+  - **Warehouse Staff** (accept/reject couriers; checklist; add items; SOP completion)
+  - **Data Entry Staff** (supplier/invoice/tax/HSN/GST/cost details per item)
+  - **Verification Staff** (final physical verification; pending full integration)
+- Secure **JWT-based authentication** with **RBAC** and protected routes.
+- Enforce the **strict workflow sequence**:
+  1) Cashier logs courier (drafts/preview → batch save)
+  2) Warehouse (View → Accept → Checklist → Item List → Complete SOP [Accept→Data Entry / Reject→Cashier])
+  3) Data Entry (financial & tax details)
+  4) Verification (physical check) **(to be finalized)**
+- Ensure all actions persist to **MongoDB** (no mocked data).
 
 ## 2) Implementation Steps
 
 ### Phase 1: POC (Skipped)
-- Not required (simple JWT auth + CRUD, no external integrations).
+- Not required.
 
-### Phase 2: V1 App Development (Core Login + Roles)
+### Phase 2: V1 App Development (Core Auth + Role Dashboards)
 **User stories (V1)**
-1. As a visitor, I see a clean landing page with **4 role cards** and can pick my role.
-2. As a user, when I select a role I can **log in with email/password** for that role.
-3. As a user, if credentials/role mismatch, I see a clear error and can retry.
-4. As a logged-in user, I’m redirected to my **role dashboard** and see “Welcome [Role]” + my name + logout.
-5. As an Owner, I can **create staff users** for allowed roles.
-6. As an Owner, I can **list and delete staff** accounts.
-7. As any user, refreshing the page keeps me logged in (JWT persisted).
-8. As a staff user, I cannot access Owner routes (403 + redirect).
+1. As a visitor, I see a role selection landing page with **5 role cards**.
+2. As a user, I can log in with email/password and be routed to my role dashboard.
+3. As a user, JWT session persists across refresh; logout clears session.
+4. As a system, role-based route protection blocks unauthorized pages.
 
 **Backend (FastAPI + MongoDB)**
-- Data model: `users { _id, email, password_hash, full_name, role, created_at, created_by }` (unique index on `email`).
-- Roles enum: `OWNER`, `WAREHOUSE`, `DATA_ENTRY`, `VERIFICATION`.
-- Security:
-  - bcrypt hashing
-  - JWT access token containing `sub` (user_id), `role`, `email`, `name`.
-  - Dependencies: `get_current_user`, `require_role(OWNER)`.
-- Seed on startup: ensure default Owner exists: `owner@warehouse.com / Owner@123`.
-- API routes (prefix `/api`):
-  - `POST /auth/login` `{email,password,role}` → `{token,user}`
-  - `GET /auth/me` → `{user}` (JWT)
-  - `POST /owner/staff` (Owner) → create staff `{email,full_name,role,password}`
-  - `GET /owner/staff` (Owner) → list staff (exclude Owner)
-  - `DELETE /owner/staff/{id}` (Owner) → delete staff
-- Error handling: 401 invalid credentials, 403 forbidden role, 409 duplicate email.
+- Data model: `users { email, password_hash, full_name, role, created_at, created_by }`.
+- JWT token includes `sub`, `role`, `email`, `name`.
+- Seed demo users:
+  - `owner@warehouse.com / Owner@123`
+  - `cashier@warehouse.com / Cashier@123`
+  - `warehouse@warehouse.com / Warehouse@123`
+  - `dataentry@warehouse.com / DataEntry@123`
+  - `verification@warehouse.com / Verify@123`
 
-**Frontend (React + Router + shadcn/ui + Tailwind)**
-- Routes:
-  - `/login` (role selection landing)
-  - `/login/:role` (login page using selected role)
-  - `/dashboard/owner`, `/dashboard/warehouse`, `/dashboard/data-entry`, `/dashboard/verification`
-- Components:
-  - RoleCard grid (4 cards) with icons + subtle hover.
-  - LoginForm (email/password; role locked from route param).
-  - AuthProvider: stores `token` + `user`; loads from `localStorage`; calls `/api/auth/me` to validate.
-  - ProtectedRoute: checks auth + optional role.
-  - DashboardShell: minimal header (app name, user chip, logout).
-  - Owner dashboard: “Manage Staff” (create form + staff table + delete).
-  - Staff dashboards: welcome placeholder card.
-- UX details:
-  - Clear inline errors + disabled submit while loading.
-  - After logout: clear storage and redirect to `/login`.
-  - If user hits `/login/:role` directly: allow; role is preselected.
+**Frontend (React + Router + Tailwind/shadcn)**
+- Role selection → role login → role dashboards.
 
-**Incremental testing during build**
-- Backend: verify seed owner, login success/failure, staff CRUD, role enforcement.
-- Frontend: verify navigation, persistence on refresh, protected routes.
+**Status**: ✅ Implemented and stable.
 
-**End of Phase 2: Run 1 full E2E test pass (testing_agent_v3)**
-- Validate all user stories above.
+### Phase 3: Courier Intake + Warehouse Processing (Cashier + Warehouse)
+**User stories (Cashier)**
+1. As a Cashier, I can create courier entries **one at a time** into a **Drafts/Preview** list.
+2. As a Cashier, I can **edit** preview items until I batch-save.
+3. As a Cashier, I can batch-save all drafts to MongoDB.
+4. As a Cashier, courier IDs are generated in backend format **`DDMMYY-NN`**.
+5. As a Cashier, I can see a **Rejected couriers** section and mark them resolved after fixing.
 
-### Phase 3: Stabilization + Hardening
-**User stories (stability)**
-1. As a user, if my token is expired/invalid, I’m redirected to `/login`.
-2. As an Owner, I get confirmation before deleting a staff account.
-3. As a user, I see consistent loading states on all protected pages.
-4. As a user, I cannot see Owner UI elements unless I’m Owner.
-5. As a system, logs show auth failures without leaking sensitive data.
+**User stories (Warehouse)**
+1. As Warehouse staff, I see couriers in a **full-width row** layout with progressive actions.
+2. As Warehouse staff, I can **Accept** a courier to unlock checklist/items.
+3. As Warehouse staff, I can run a **6-step checklist** and track progress.
+4. As Warehouse staff, I can add an **item list** via multi-row table with auto-merge logic.
+5. As Warehouse staff, I can complete SOP:
+   - **Accept** → send to Data Entry
+   - **Reject** → require reason and send back to Cashier
+6. **New (Completed):** As Warehouse staff, I can **Reject at the initial stage** (next to Accept) with a required reason; this sends the courier back to Cashier automatically.
 
-**Tasks**
-- Add JWT expiry + refresh handling strategy (simple re-login on expiry for MVP).
-- Add UI polish: empty states, confirmation dialogs, better error copy.
-- Tighten backend validation (Pydantic schemas, role validation, password rules for staff creation).
+**Backend additions (Phase 3)**
+- Couriers collection: `couriers/parcels` supports fields:
+  - core courier details (company, packages, payment, slip photo)
+  - workflow flags: `accepted`, `sent_to_data_entry`, `rejected`, `rejected_reason`, timestamps
+  - warehouse checklist array
+  - items/products array
+- Endpoints (existing):
+  - `POST /api/couriers/batch` (Cashier)
+  - `PATCH /api/couriers/{cid}/accept` (Warehouse)
+  - `PATCH /api/couriers/{cid}/checklist` (Warehouse)
+  - `POST /api/couriers/{cid}/items/batch` (Warehouse)
+  - `PATCH /api/couriers/{cid}/reject` (Warehouse; supports both SOP reject and initial-stage reject)
+  - `PATCH /api/couriers/{cid}/resolve` (Cashier)
+  - `GET /api/couriers/rejected` (Cashier)
 
-**End of Phase 3: Run 1 full E2E test pass (testing_agent_v3)**
+**Frontend additions (Phase 3)**
+- Warehouse rows now show **Accept + Reject** when not accepted.
+- Reject opens a small **reason dialog** (required) and posts to `/couriers/{cid}/reject`.
+- Cashier shows rejected couriers with reason + “Mark resolved”.
 
-### Phase 4: Next Modules (Deferred)
-- After approval, add “next pages”: products inbound, inventory, locations, verification workflows, etc.
+**Status**: ✅ Implemented.
+- Verified end-to-end via screenshot tool:
+  - Warehouse reject → courier shows as rejected
+  - Cashier rejected section displays the same courier + reason
+
+### Phase 4: Data Entry Workflow (Financial + Tax)
+**User stories (Data Entry Staff)**
+1. As Data Entry staff, I see couriers that were sent from Warehouse.
+2. As Data Entry staff, I can enter per-item details:
+   - Supplier
+   - Invoice details
+   - Purchase date
+   - Transportation / logistics
+   - HSN + GST%
+   - Cost / pricing fields
+
+**Backend**
+- Endpoint:
+  - `PATCH /api/couriers/{cid}/items/{item_id}/data-entry`
+
+**Status**: ✅ Implemented.
+
+### Phase 5: Verification Staff Dashboard (Pending)
+**Goal**: Finalize Verification dashboard and integrate sequential flow after Data Entry.
+
+**Open questions to confirm**
+- When does Verification happen exactly (after Data Entry vs parallel)?
+- Verification checklist scope:
+  - per-courier approve/reject vs per-item verification
+- On rejection from Verification, which role receives it back (Warehouse vs Data Entry vs chooser)?
+
+**Planned tasks**
+- Add “Ready for verification” state on courier after Data Entry completion.
+- Build Verification dashboard list + detail modal:
+  - show courier + items + entered financial/tax details
+  - physical check fields (qty match, damage, remarks)
+  - Approve → finalize
+  - Reject → route back with reason
+- Add relevant backend endpoints and DB fields.
+
+**Status**: ⏳ Not started / needs requirement confirmation.
+
+### Phase 6: Stabilization + Hardening (Ongoing)
+- Refactor backend: split `server.py` into routers/models/services as file grows.
+- Improve validations and error handling.
+- Add consistent loading/empty states and better toast messages.
+- Run an end-to-end regression pass after Verification integration.
 
 ## 3) Next Actions
-- Confirm any naming preferences for roles on UI (e.g., “Verification” vs “Verifier”).
-- Implement Phase 2 end-to-end (backend + frontend + seed owner + staff management).
-- Run testing_agent_v3 and fix issues until all Phase 2 user stories pass.
+1. **User verify** the new Warehouse initial-stage **Reject** button behavior and UI.
+2. Confirm **Verification workflow requirements**:
+   - trigger condition (after Data Entry)
+   - approve/reject rules and routing target on rejection
+3. Implement Phase 5 (Verification) based on confirmed rules.
+4. (Optional) Add Owner analytics improvements after Verification is complete.
 
 ## 4) Success Criteria
-- Role selection landing with 4 cards works and feels modern/minimal.
-- Owner can log in with seeded credentials and manage staff (create/list/delete).
-- Staff users can log in only under their role and reach their placeholder dashboard.
-- JWT persists across refresh; logout clears session.
-- Role-based route protection reliably blocks unauthorized access (no Owner route access for staff).
-- E2E tests for Phase 2 and Phase 3 pass.
+- JWT auth + RBAC works across all 5 roles.
+- Cashier can draft → batch save; IDs are `DDMMYY-NN`.
+- Warehouse progressive flow works:
+  - Accept unlocks steps
+  - **Initial-stage Reject** and SOP Reject both send courier back to Cashier with reason
+- Data Entry can add supplier/invoice/tax/HSN/GST/cost details per item.
+- Verification dashboard is implemented and the full sequence Cashier → Warehouse → Data Entry → Verification is enforced.
+- No mocked data; everything persists to MongoDB.
