@@ -29,6 +29,8 @@ import {
   File as FileIcon,
   Paperclip,
   Download,
+  UserX,
+  Crown,
 } from "lucide-react";
 import { toast } from "sonner";
 import RejectedCourierEditModal from "@/components/RejectedCourierEditModal";
@@ -46,7 +48,17 @@ const ALLOWED_FILE_MIMES = [
   "text/plain",
   "text/csv",
 ];
-const ALLOWED_FILE_EXTS = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv"];
+const ALLOWED_FILE_EXTS = [
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  ".txt",
+  ".csv",
+];
 
 function isAllowedFile(file) {
   if (!file) return false;
@@ -107,42 +119,65 @@ const PAYMENT_ICON = {
 const blankEntry = () => ({
   uid: Math.random().toString(36).slice(2),
   courier_company: "",
-  num_packages: "",
+  quantity: "", // Keep this for your UI
+  num_packages: "", // Add this back for backend
   photo: null,
+  package_photo: null,
+  courier_charge: "",
+  vehicle: "",
   payment_mode: "none",
   handled_by: "",
   attachments: [],
+  transport_charge: "",
+  transport_vehicle: "",
+  transport_payment_mode: "none",
 });
 
 export default function CashierDashboard() {
   const { user, API, authHeaders } = useAuth();
   const fileRef = useRef(null);
+  const packagePhotoRef = useRef(null);
   const docRef = useRef(null);
   const [entry, setEntry] = useState(blankEntry());
   const [editingUid, setEditingUid] = useState(null);
   const [drafts, setDrafts] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [savedSession, setSavedSession] = useState([]);
-  const [rejected, setRejected] = useState([]);
+  const [warehouseRejected, setWarehouseRejected] = useState([]);
+  const [ownerRejected, setOwnerRejected] = useState([]);
   const [resolvingId, setResolvingId] = useState(null);
   const [editingRejected, setEditingRejected] = useState(null);
 
-  const loadRejected = useCallback(async () => {
+  // Load warehouse rejected couriers
+  const loadWarehouseRejected = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/couriers/rejected`, {
         headers: authHeaders(),
       });
-      setRejected(res.data || []);
+      setWarehouseRejected(res.data || []);
+    } catch (e) {
+      // silent
+    }
+  }, [API, authHeaders]);
+
+  // Load owner rejected couriers
+  const loadOwnerRejected = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/cashier/owner-rejected-couriers`, {
+        headers: authHeaders(),
+      });
+      setOwnerRejected(res.data || []);
     } catch (e) {
       // silent
     }
   }, [API, authHeaders]);
 
   useEffect(() => {
-    loadRejected();
-  }, [loadRejected]);
+    loadWarehouseRejected();
+    loadOwnerRejected();
+  }, [loadWarehouseRejected, loadOwnerRejected]);
 
-  const resolveRejection = async (c) => {
+  const resolveWarehouseRejection = async (c) => {
     setResolvingId(c.id);
     try {
       await axios.patch(
@@ -150,8 +185,29 @@ export default function CashierDashboard() {
         {},
         { headers: authHeaders() }
       );
-      toast.success(`${c.courier_number} marked as resolved`);
-      setRejected((arr) => arr.filter((r) => r.id !== c.id));
+      toast.success(`${c.courier_number} marked as resolved, resubmitted to Owner`);
+      setWarehouseRejected((arr) => arr.filter((r) => r.id !== c.id));
+      // Refresh owner rejected list as well
+      loadOwnerRejected();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to resolve");
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
+  const resolveOwnerRejection = async (c) => {
+    setResolvingId(c.id);
+    try {
+      await axios.patch(
+        `${API}/couriers/${c.id}/resolve`,
+        {},
+        { headers: authHeaders() }
+      );
+      toast.success(`${c.courier_number} marked as resolved, resubmitted to Owner`);
+      setOwnerRejected((arr) => arr.filter((r) => r.id !== c.id));
+      // Refresh warehouse rejected list as well
+      loadWarehouseRejected();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Failed to resolve");
     } finally {
@@ -176,13 +232,37 @@ export default function CashierDashboard() {
     }
   };
 
+  const handlePackagePhoto = async (e) => {
+    const file = e.target.files?.[0];
+
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      return toast.error("Choose image file");
+    }
+
+    if (file.size > MAX_IMG_BYTES) {
+      return toast.error("Image must be under 4MB");
+    }
+
+    try {
+      update({
+        package_photo: await fileToDataURL(file),
+      });
+    } catch {
+      toast.error("Failed to read image");
+    }
+  };
+
   const handleDocs = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     const valid = [];
     for (const file of files) {
       if (!isAllowedFile(file)) {
-        toast.error(`${file.name}: unsupported file type (use PDF, DOC, XLS, PPT, TXT, CSV).`);
+        toast.error(
+          `${file.name}: unsupported file type (use PDF, DOC, XLS, PPT, TXT, CSV).`
+        );
         continue;
       }
       if (file.size > MAX_FILE_BYTES) {
@@ -207,7 +287,9 @@ export default function CashierDashboard() {
         ...eState,
         attachments: [...(eState.attachments || []), ...valid],
       }));
-      toast.success(`${valid.length} file${valid.length === 1 ? "" : "s"} attached`);
+      toast.success(
+        `${valid.length} file${valid.length === 1 ? "" : "s"} attached`
+      );
     }
     if (docRef.current) docRef.current.value = "";
   };
@@ -239,7 +321,9 @@ export default function CashierDashboard() {
 
     if (isEditing) {
       setDrafts((arr) =>
-        arr.map((d) => (d.uid === editingUid ? { ...entry, uid: editingUid } : d))
+        arr.map((d) =>
+          d.uid === editingUid ? { ...entry, uid: editingUid } : d
+        )
       );
       toast.success("Draft updated");
     } else {
@@ -273,6 +357,7 @@ export default function CashierDashboard() {
             courier_company: d.courier_company.trim() || null,
             num_packages: Number(d.num_packages),
             slip_photo: d.photo || null,
+            package_photo: d.package_photo || null,
             products: [],
             payment_made: isPaid,
             payment_mode: isPaid ? d.payment_mode : null,
@@ -286,7 +371,9 @@ export default function CashierDashboard() {
         }),
       };
       // Use first non-empty handled_by as batch-level (since backend takes one)
-      const firstHandled = drafts.find((d) => d.handled_by?.trim())?.handled_by?.trim();
+      const firstHandled = drafts
+        .find((d) => d.handled_by?.trim())
+        ?.handled_by?.trim();
       if (firstHandled) payload.handled_by = firstHandled;
 
       const res = await axios.post(`${API}/couriers/batch`, payload, {
@@ -296,7 +383,9 @@ export default function CashierDashboard() {
       setSavedSession((arr) => [...created.reverse(), ...arr]);
       setDrafts([]);
       resetCard();
-      toast.success(`${created.length} courier${created.length === 1 ? "" : "s"} saved`);
+      toast.success(
+        `${created.length} courier${created.length === 1 ? "" : "s"} sent to Owner for approval`
+      );
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Failed to save couriers");
@@ -325,13 +414,121 @@ export default function CashierDashboard() {
             </div>
             <div className="text-sm text-neutral-500">
               Hi {user?.full_name?.split(" ")[0] || "there"}, add to preview
-              first. You can edit or delete drafts until you save them.
+              first. After saving, couriers go to Owner for approval.
             </div>
           </div>
         </div>
 
-        {/* Rejected couriers — needs attention */}
-        {rejected.length > 0 && (
+        {/* Owner Rejected couriers - needs attention (higher priority) */}
+        {ownerRejected.length > 0 && (
+          <div className="bg-white border border-orange-200 rounded-2xl p-4">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-orange-600 text-white flex items-center justify-center">
+                  <Crown className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-neutral-900">
+                    Rejected by Owner · Needs Your Attention
+                  </div>
+                  <div className="text-[11px] text-neutral-500">
+                    {ownerRejected.length} courier
+                    {ownerRejected.length === 1 ? "" : "s"} rejected by Owner · fix issues and resubmit
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={loadOwnerRejected}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs text-neutral-500 hover:bg-neutral-100"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Refresh
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {ownerRejected.map((c) => (
+                <div
+                  key={c.id}
+                  data-testid={`owner-rejected-${c.courier_number}`}
+                  className="flex items-start gap-3 p-3 border border-orange-200 bg-orange-50/40 rounded-xl"
+                >
+                  {c.slip_photo ? (
+                    <img
+                      src={c.slip_photo}
+                      alt="slip"
+                      className="w-12 h-12 rounded-lg object-cover border border-orange-100 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg bg-white border border-orange-100 text-orange-300 flex items-center justify-center shrink-0">
+                      <ImageIcon className="w-5 h-5" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-mono font-semibold text-neutral-900">
+                        {c.courier_number}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-orange-100 text-orange-700">
+                        <UserX className="w-3 h-3" /> Rejected by Owner
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-neutral-100 text-neutral-700">
+                        <Package className="w-3 h-3" /> {c.num_packages} pkgs
+                      </span>
+                      {c.courier_company && (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-neutral-500">
+                          <Truck className="w-3 h-3" /> {c.courier_company}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 text-[12px] text-orange-800">
+                      <span className="font-medium">Reason: </span>
+                      {c.owner_rejected_reason || (
+                        <span className="text-orange-500/80 italic">
+                          No reason provided
+                        </span>
+                      )}
+                    </div>
+                    {c.owner_rejected_by && (
+                      <div className="text-[11px] text-neutral-500 mt-0.5">
+                        Rejected by Owner: {c.owner_rejected_by}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setEditingRejected(c)}
+                      data-testid={`edit-resend-owner-${c.courier_number}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-900 text-white text-xs font-medium hover:bg-neutral-800"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edit &amp; resend
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => resolveOwnerRejection(c)}
+                      disabled={resolvingId === c.id}
+                      data-testid={`resolve-owner-${c.courier_number}`}
+                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+                      title="Resubmit without changes"
+                    >
+                      {resolvingId === c.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="w-3 h-3" />
+                      )}
+                      Resubmit without changes
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Warehouse Rejected couriers */}
+        {warehouseRejected.length > 0 && (
           <div className="bg-white border border-red-200 rounded-2xl p-4">
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2">
@@ -343,15 +540,15 @@ export default function CashierDashboard() {
                     Rejected by Warehouse · needs your attention
                   </div>
                   <div className="text-[11px] text-neutral-500">
-                    {rejected.length} courier
-                    {rejected.length === 1 ? "" : "s"} sent back · check the
+                    {warehouseRejected.length} courier
+                    {warehouseRejected.length === 1 ? "" : "s"} sent back · check the
                     reason and mark resolved once fixed.
                   </div>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={loadRejected}
+                onClick={loadWarehouseRejected}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs text-neutral-500 hover:bg-neutral-100"
               >
                 <RefreshCw className="w-3.5 h-3.5" /> Refresh
@@ -359,10 +556,10 @@ export default function CashierDashboard() {
             </div>
 
             <div className="space-y-2">
-              {rejected.map((c) => (
+              {warehouseRejected.map((c) => (
                 <div
                   key={c.id}
-                  data-testid={`rejected-${c.courier_number}`}
+                  data-testid={`warehouse-rejected-${c.courier_number}`}
                   className="flex items-start gap-3 p-3 border border-red-200 bg-red-50/40 rounded-xl"
                 >
                   {c.slip_photo ? (
@@ -400,7 +597,7 @@ export default function CashierDashboard() {
                     </div>
                     {c.rejected_by && (
                       <div className="text-[11px] text-neutral-500 mt-0.5">
-                        Rejected by {c.rejected_by}
+                        Rejected by Warehouse: {c.rejected_by}
                       </div>
                     )}
                   </div>
@@ -408,7 +605,7 @@ export default function CashierDashboard() {
                     <button
                       type="button"
                       onClick={() => setEditingRejected(c)}
-                      data-testid={`edit-resend-${c.courier_number}`}
+                      data-testid={`edit-resend-warehouse-${c.courier_number}`}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-900 text-white text-xs font-medium hover:bg-neutral-800"
                     >
                       <Pencil className="w-3.5 h-3.5" />
@@ -416,18 +613,18 @@ export default function CashierDashboard() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => resolveRejection(c)}
+                      onClick={() => resolveWarehouseRejection(c)}
                       disabled={resolvingId === c.id}
-                      data-testid={`resolve-${c.courier_number}`}
+                      data-testid={`resolve-warehouse-${c.courier_number}`}
                       className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
-                      title="Resend without changes"
+                      title="Resubmit without changes"
                     >
                       {resolvingId === c.id ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
                       ) : (
                         <CheckCircle2 className="w-3 h-3" />
                       )}
-                      Resend without changes
+                      Resubmit without changes
                     </button>
                   </div>
                 </div>
@@ -449,7 +646,7 @@ export default function CashierDashboard() {
                 </div>
                 <div className="text-[11px] text-neutral-500">
                   {savedSession.length} courier
-                  {savedSession.length === 1 ? "" : "s"} saved · newest first
+                  {savedSession.length === 1 ? "" : "s"} saved · sent to Owner for approval
                 </div>
               </div>
             </div>
@@ -480,21 +677,30 @@ export default function CashierDashboard() {
 
         {/* Form card */}
         <form onSubmit={addOrUpdateDraft} className="space-y-4">
-          <div className="bg-white border border-neutral-200 rounded-2xl divide-y divide-neutral-100 fade-in">
-            <div className="flex items-center justify-between px-5 py-3 bg-neutral-50/60 rounded-t-2xl">
-              <div className="flex items-center gap-2.5 min-w-0">
+          <div className="bg-white border border-neutral-200 rounded-2xl divide-y divide-neutral-100 fade-in overflow-hidden relative">
+            {/* Subtle gradient overlay */}
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-50/40 via-transparent to-blue-50/40 pointer-events-none" />
+            
+            <div className="relative flex items-center justify-between px-5 py-4 bg-white rounded-t-2xl border-b border-neutral-100">
+              <div className="flex items-center gap-3 min-w-0">
                 <div
-                  className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-white ${
-                    isEditing ? "bg-amber-600" : "bg-purple-600"
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    isEditing 
+                      ? "bg-amber-100 text-amber-600 ring-1 ring-amber-200" 
+                      : "bg-purple-100 text-purple-600 ring-1 ring-purple-200"
                   }`}
                 >
-                  {isEditing ? <Pencil className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                  {isEditing ? (
+                    <Pencil className="w-5 h-5" />
+                  ) : (
+                    <Plus className="w-5 h-5" />
+                  )}
                 </div>
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-neutral-900">
-                    {isEditing ? "Editing draft" : "New courier"}
+                    {isEditing ? "Editing draft" : "New courier entry"}
                   </div>
-                  <div className="text-[11px] text-neutral-500">
+                  <div className="text-[11px] text-neutral-500 mt-0.5">
                     {isEditing
                       ? "Update and click Update preview to apply changes."
                       : "Fill details, add to preview, edit before saving."}
@@ -508,227 +714,257 @@ export default function CashierDashboard() {
                 <button
                   type="button"
                   onClick={resetCard}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-neutral-500 hover:bg-neutral-100"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200"
                   data-testid="cashier-reset-card"
                 >
-                  <RefreshCw className="w-3.5 h-3.5" />{" "}
-                  {isEditing ? "Cancel edit" : "Reset card"}
+                  <X className="w-3.5 h-3.5" />
+                  {isEditing ? "Cancel" : "Reset"}
                 </button>
               )}
             </div>
 
-            <div className="px-5 py-4 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
-                    <Truck className="w-3.5 h-3.5" /> Courier company{" "}
-                    <span className="text-neutral-400 font-normal">
-                      (optional)
-                    </span>
-                  </label>
-                  <input
-                    data-testid="courier-company-0"
-                    value={entry.courier_company}
-                    onChange={(e) =>
-                      update({ courier_company: e.target.value })
-                    }
-                    placeholder="e.g. DTDC, BlueDart, Delhivery"
-                    className="mt-1 w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
-                    <Package className="w-3.5 h-3.5" /> Number of packages
-                  </label>
-                  <input
-                    data-testid="courier-packages-0"
-                    type="number"
-                    min="1"
-                    value={entry.num_packages}
-                    onChange={(e) => update({ num_packages: e.target.value })}
-                    placeholder="e.g. 3"
-                    className="mt-1 w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                  />
-                </div>
-              </div>
+            <div className="relative px-5 py-5 space-y-5">
+              {/* Section 1 - Courier Info */}
+{/* Row 1: Package Photo | No. of Packages | + Upload */}
+<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-              <div>
-                <label className="text-xs font-medium text-neutral-600">
-                  Slip / receipt photo{" "}
-                  <span className="text-neutral-400 font-normal">(optional)</span>
-                </label>
-                <div className="mt-1 flex items-center gap-3">
-                  {entry.photo ? (
-                    <div className="relative">
-                      <img
-                        src={entry.photo}
-                        alt="slip"
-                        className="w-20 h-20 object-cover rounded-xl border border-neutral-200"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => update({ photo: null })}
-                        className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-white border border-neutral-200 text-neutral-600 shadow flex items-center justify-center hover:text-red-600"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-20 h-20 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 text-neutral-400 flex items-center justify-center">
-                      <ImageIcon className="w-5 h-5" />
-                    </div>
-                  )}
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhoto}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fileRef.current?.click()}
-                    data-testid="slip-photo-0"
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50"
-                  >
-                    <Upload className="w-3.5 h-3.5" />{" "}
-                    {entry.photo ? "Replace" : "Upload"}
-                  </button>
-                </div>
-              </div>
+  {/* Package Photo Preview + Clickable */}
+  <div className="space-y-1.5">
+    <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
+      <Package className="w-3.5 h-3.5 text-neutral-400" />
+      Package Photo
+    </label>
 
-              {/* Files / Documents (PDF, DOC, XLS, etc.) */}
-              <div data-testid="courier-docs-section">
-                <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
-                  <Paperclip className="w-3.5 h-3.5" /> Files / documents{" "}
-                  <span className="text-neutral-400 font-normal">
-                    (PDF, DOC, XLS, PPT, TXT, CSV · optional)
-                  </span>
-                </label>
-                <input
-                  ref={docRef}
-                  type="file"
-                  multiple
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv"
-                  onChange={handleDocs}
-                  className="hidden"
-                />
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => docRef.current?.click()}
-                    data-testid="courier-docs-upload-btn"
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed border-neutral-300 text-xs text-neutral-700 hover:bg-neutral-50 hover:border-neutral-400"
-                  >
-                    <Upload className="w-3.5 h-3.5" /> Attach files
-                  </button>
-                  {(entry.attachments?.length || 0) > 0 && (
-                    <span className="text-[11px] text-neutral-500">
-                      {entry.attachments.length} file
-                      {entry.attachments.length === 1 ? "" : "s"} attached
-                    </span>
-                  )}
-                </div>
-                {(entry.attachments?.length || 0) > 0 && (
-                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {entry.attachments.map((a) => {
-                      const Icon = fileIconFor(a.mime_type, a.name);
-                      return (
-                        <div
-                          key={a.uid}
-                          data-testid={`courier-doc-chip-${a.uid}`}
-                          className="flex items-center gap-2 p-2 pr-1 rounded-lg border border-neutral-200 bg-neutral-50/60"
-                        >
-                          <div className="w-8 h-8 rounded-md bg-white border border-neutral-200 text-neutral-600 flex items-center justify-center shrink-0">
-                            <Icon className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div
-                              className="text-xs font-medium text-neutral-900 truncate"
-                              title={a.name}
-                            >
-                              {a.name}
-                            </div>
-                            <div className="text-[10px] text-neutral-500">
-                              {formatBytes(a.size)}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeAttachment(a.uid)}
-                            data-testid={`courier-doc-remove-${a.uid}`}
-                            className="w-7 h-7 rounded-md text-neutral-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center shrink-0"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+    <div
+      onClick={() => packagePhotoRef.current?.click()}
+      className="h-[48px] px-3 rounded-xl border border-neutral-200 bg-neutral-50 flex items-center gap-2 cursor-pointer hover:border-orange-300 hover:bg-orange-50/30 transition-all duration-200"
+    >
+      {entry.package_photo ? (
+        <>
+          <img
+            src={entry.package_photo}
+            alt="package"
+            className="w-8 h-8 rounded-lg object-cover shadow-sm"
+          />
+          <span className="text-xs text-neutral-500">
+            Photo Added
+          </span>
+        </>
+      ) : (
+        <>
+          <Package className="w-4 h-4 text-neutral-400" />
+          <span className="text-xs text-neutral-400">
+            Tap to Upload
+          </span>
+        </>
+      )}
+    </div>
+  </div>
 
-              <div>
-                <div className="text-xs font-medium text-neutral-600 mb-2">
-                  Payment mode
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {PAYMENT_OPTIONS.map((m) => {
-                    const active = entry.payment_mode === m.key;
-                    const isNone = m.key === "none";
-                    return (
-                      <button
-                        key={m.key}
-                        type="button"
-                        data-testid={`courier-payment-0-${m.key}`}
-                        onClick={() => update({ payment_mode: m.key })}
-                        className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
-                          active
-                            ? isNone
-                              ? "border-amber-300 bg-amber-50 text-amber-800"
-                              : "border-neutral-900 bg-white text-neutral-900"
-                            : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300"
-                        }`}
-                      >
-                        <m.Icon className="w-4 h-4" /> {m.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+  {/* No Of Packages */}
+  <div className="space-y-1.5">
+    <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
+      <Package className="w-3.5 h-3.5 text-neutral-400" />
+      No. of Packages
+    </label>
 
-              <div>
-                <label className="text-xs font-medium text-neutral-600">
-                  Handled by{" "}
-                  <span className="text-neutral-400 font-normal">(optional)</span>
-                </label>
-                <input
-                  data-testid="courier-handled-by"
-                  value={entry.handled_by}
-                  onChange={(e) => update({ handled_by: e.target.value })}
-                  placeholder="e.g. Biswajit"
-                  className="mt-1 w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                />
-              </div>
+    <input
+      type="number"
+      value={entry.num_packages}
+      onChange={(e) =>
+        update({ num_packages: e.target.value })
+      }
+      placeholder="0"
+      className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-purple-100 focus:border-purple-400 transition-all duration-200"
+    />
+  </div>
 
+  {/* Upload Button */}
+  <div className="space-y-1.5">
+    <label className="text-xs font-medium text-neutral-600">
+      Upload Image
+    </label>
+
+    <div
+      onClick={() => packagePhotoRef.current?.click()}
+      className="group h-[48px] rounded-xl border-2 border-dashed border-neutral-200 bg-neutral-50/50 flex items-center justify-center cursor-pointer hover:border-orange-300 hover:bg-orange-50/30 transition-all duration-200"
+    >
+      <Plus className="w-5 h-5 text-neutral-400 group-hover:text-orange-600" />
+    </div>
+  </div>
+
+  {/* ONE Hidden Input Only */}
+  <input
+    ref={packagePhotoRef}
+    type="file"
+    accept="image/*"
+    capture="environment"
+    onChange={handlePackagePhoto}
+    className="hidden"
+  />
+
+</div>
+
+{/* Row 2: Transporter | Slip Photo | Transport Amount | Payment Mode */}
+<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+  <div className="space-y-1.5">
+    <label className="text-xs font-medium text-neutral-600">
+      Transporter
+    </label>
+    <input
+      value={entry.transport_vehicle}
+      onChange={(e) => update({ transport_vehicle: e.target.value })}
+      placeholder="Transporter"
+      className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all duration-200"
+    />
+  </div>
+
+  <div className="space-y-1.5">
+    <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
+      <ImageIcon className="w-3.5 h-3.5 text-neutral-400" />
+      Slip Photo
+    </label>
+    <div
+      onClick={() => fileRef.current?.click()}
+      className="group h-[48px] px-3 rounded-xl border-2 border-dashed border-neutral-200 bg-neutral-50/50 flex items-center gap-2 cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all duration-200"
+    >
+      {entry.photo ? (
+        <img
+          src={entry.photo}
+          alt="slip"
+          className="w-8 h-8 rounded-lg object-cover shadow-sm"
+        />
+      ) : (
+        <Upload className="w-4 h-4 text-neutral-400 group-hover:text-purple-600" />
+      )}
+      <span className="text-xs text-neutral-400 group-hover:text-purple-600">
+        {entry.photo ? "Photo Added" : "Upload"}
+      </span>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        onChange={handlePhoto}
+        className="hidden"
+      />
+    </div>
+  </div>
+
+  <div className="space-y-1.5">
+    <label className="text-xs font-medium text-neutral-600">
+      Transport Amount
+    </label>
+    <input
+      type="number"
+      value={entry.transport_charge}
+      onChange={(e) => update({ transport_charge: e.target.value })}
+      placeholder="₹ 0"
+      className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all duration-200"
+    />
+  </div>
+
+  <div className="space-y-1.5">
+    <label className="text-xs font-medium text-neutral-600">
+      Payment Mode
+    </label>
+    <select
+      value={entry.transport_payment_mode}
+      onChange={(e) => update({ transport_payment_mode: e.target.value })}
+      className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all duration-200 cursor-pointer"
+    >
+      <option value="upi">UPI</option>
+      <option value="cash">Cash</option>
+      <option value="card">Card</option>
+      <option value="none">Unpaid</option>
+    </select>
+  </div>
+</div>
+
+{/* Row 3: Delivery Charges | Delivery Type | Payment Mode */}
+<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+  <div className="space-y-1.5">
+    <label className="text-xs font-medium text-neutral-600">
+      Delivery Charges
+    </label>
+    <input
+      type="number"
+      value={entry.courier_charge}
+      onChange={(e) => update({ courier_charge: e.target.value })}
+      placeholder="₹ 0"
+      className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all duration-200"
+    />
+  </div>
+
+  <div className="space-y-1.5">
+    <label className="text-xs font-medium text-neutral-600">
+      Delivery Type
+    </label>
+    <select
+      value={entry.vehicle}
+      onChange={(e) => update({ vehicle: e.target.value })}
+      className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all duration-200 cursor-pointer"
+    >
+      <option value="">Select</option>
+      <option value="bike">Bike</option>
+      <option value="car">Car</option>
+      <option value="auto">Auto</option>
+      <option value="other">Other</option>
+    </select>
+  </div>
+
+  <div className="space-y-1.5">
+    <label className="text-xs font-medium text-neutral-600">
+      Payment Mode
+    </label>
+    <select
+      value={entry.payment_mode}
+      onChange={(e) => update({ payment_mode: e.target.value })}
+      className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all duration-200 cursor-pointer"
+    >
+      <option value="upi">UPI</option>
+      <option value="cash">Cash</option>
+      <option value="card">Card</option>
+      <option value="none">Unpaid</option>
+    </select>
+  </div>
+</div>
+
+{/* Handled By */}
+<div className="space-y-1.5">
+  <label className="text-xs font-medium text-neutral-600">
+    Handled By
+  </label>
+  <input
+    data-testid="courier-handled-by"
+    value={entry.handled_by}
+    onChange={(e) => update({ handled_by: e.target.value })}
+    placeholder="Handled By"
+    className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400 transition-all duration-200"
+  />
+</div>
+
+              {/* Submit Button */}
               <button
                 type="submit"
                 data-testid="cashier-add-preview"
-                className={`w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`relative w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 overflow-hidden group ${
                   isEditing
-                    ? "bg-amber-600 text-white hover:bg-amber-700"
-                    : "bg-neutral-900 text-white hover:bg-neutral-800"
+                    ? "bg-amber-500 text-white hover:bg-amber-600 shadow-lg shadow-amber-200"
+                    : "bg-blue-500 text-white hover:bg-blue-600 shadow-lg shadow-blue-200"
                 }`}
               >
-                {isEditing ? (
-                  <>
-                    <Save className="w-4 h-4" /> Update preview
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4" /> Add to preview
-                  </>
-                )}
+                <span className="relative z-10 flex items-center gap-2">
+                  {isEditing ? (
+                    <>
+                      <Save className="w-4 h-4" /> Update preview
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" /> Add to preview
+                    </>
+                  )}
+                </span>
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
               </button>
             </div>
           </div>
@@ -747,8 +983,8 @@ export default function CashierDashboard() {
                     Preview · pending save
                   </div>
                   <div className="text-[11px] text-neutral-500">
-                    {drafts.length} courier{drafts.length === 1 ? "" : "s"} ready ·
-                    edit any until you save
+                    {drafts.length} courier{drafts.length === 1 ? "" : "s"}{" "}
+                    ready · edit any until you save
                   </div>
                 </div>
               </div>
@@ -793,7 +1029,7 @@ export default function CashierDashboard() {
                   </>
                 ) : (
                   <>
-                    <Save className="w-4 h-4" /> Save all
+                    <Save className="w-4 h-4" /> Send to Owner for Approval
                   </>
                 )}
               </button>
@@ -805,7 +1041,8 @@ export default function CashierDashboard() {
         courier={editingRejected}
         onClose={() => setEditingRejected(null)}
         onResent={(updated) => {
-          setRejected((arr) => arr.filter((r) => r.id !== updated.id));
+          setWarehouseRejected((arr) => arr.filter((r) => r.id !== updated.id));
+          setOwnerRejected((arr) => arr.filter((r) => r.id !== updated.id));
         }}
       />
     </DashboardShell>
@@ -859,7 +1096,8 @@ function DraftPreviewCard({ draft, index, active, onEdit, onDelete }) {
             </span>
             {(draft.attachments?.length || 0) > 0 && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                <Paperclip className="w-3 h-3" /> {draft.attachments.length} file
+                <Paperclip className="w-3 h-3" /> {draft.attachments.length}{" "}
+                file
                 {draft.attachments.length === 1 ? "" : "s"}
               </span>
             )}

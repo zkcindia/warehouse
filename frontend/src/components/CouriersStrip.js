@@ -84,19 +84,21 @@ export default function CouriersStrip({ onCouriersChange }) {
   const [rejectReason, setRejectReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await axios.get(`${API}/couriers`, {
-        headers: authHeaders(),
-      });
-      setCouriers(res.data || []);
-    } catch (e) {
-      // silent
-    } finally {
-      setLoading(false);
-    }
-  }, [API, authHeaders]);
+// In CouriersStrip.jsx, update the load function
+const load = useCallback(async () => {
+  setLoading(true);
+  try {
+    // Change this endpoint
+    const res = await axios.get(`${API}/warehouse/pending-couriers`, {
+      headers: authHeaders(),
+    });
+    setCouriers(res.data || []);
+  } catch (e) {
+    // silent
+  } finally {
+    setLoading(false);
+  }
+}, [API, authHeaders]);
 
   useEffect(() => {
     load();

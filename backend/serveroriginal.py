@@ -20,7 +20,7 @@ api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
 # =========================
-# Helper Functions for Couriers
+# Helper Functions for Couriers (simplified)
 # =========================
 def courier_doc_to_out(doc: dict) -> dict:
     created_at = doc.get('created_at')
@@ -77,14 +77,6 @@ def courier_doc_to_out(doc: dict) -> dict:
         'rejected_reason': doc.get('rejected_reason'),
         'rejected_at': doc.get('rejected_at'),
         'rejected_by': doc.get('rejected_by'),
-        'owner_approved': bool(doc.get('owner_approved', False)),
-        'owner_approved_at': doc.get('owner_approved_at'),
-        'owner_approved_by': doc.get('owner_approved_by'),
-        'owner_rejected': bool(doc.get('owner_rejected', False)),
-        'owner_rejected_reason': doc.get('owner_rejected_reason'),
-        'owner_rejected_at': doc.get('owner_rejected_at'),
-        'owner_rejected_by': doc.get('owner_rejected_by'),
-        'status': doc.get('status', 'pending_owner_approval'),
         'sent_to_data_entry': bool(doc.get('sent_to_data_entry', False)),
         'sent_to_owner': bool(doc.get('sent_to_owner', False)),
         'sent_to_owner_at': doc.get('sent_to_owner_at'),
@@ -266,125 +258,6 @@ async def delete_staff(user_id: str, owner: dict = Depends(require_role(ROLE_OWN
     return {"success": True, "id": user_id}
 
 # =========================
-# Owner Approval Routes (Cashier → Owner approval)
-# =========================
-@api_router.get("/owner/pending-cashier-couriers", response_model=list[CourierOut])
-async def get_pending_cashier_couriers(user: dict = Depends(require_role(ROLE_OWNER))):
-    """Get couriers created by Cashier waiting for Owner approval"""
-    cursor = db.couriers.find(
-        {
-            '$or': [
-                {'owner_approved': {'$exists': False}},
-                {'owner_approved': False}
-            ],
-            'owner_rejected': {'$ne': True},
-            'status': {'$ne': 'warehouse_processing'},
-            'accepted': {'$ne': True}
-        },
-        {'_id': 0}
-    ).sort('created_at', -1)
-    docs = await cursor.to_list(1000)
-    return [courier_doc_to_out(d) for d in docs]
-
-@api_router.get("/cashier/owner-rejected-couriers", response_model=list[CourierOut])
-async def get_owner_rejected_couriers(user: dict = Depends(require_role(ROLE_CASHIER))):
-    """Get couriers rejected by Owner, waiting for Cashier to fix"""
-    cursor = db.couriers.find(
-        {
-            'owner_rejected': True,
-            'status': 'owner_rejected'
-        },
-        {'_id': 0}
-    ).sort('owner_rejected_at', -1)
-    docs = await cursor.to_list(1000)
-    return [courier_doc_to_out(d) for d in docs]
-
-@api_router.get("/warehouse/pending-couriers", response_model=list[CourierOut])
-async def get_pending_warehouse_couriers(user: dict = Depends(require_role(ROLE_WAREHOUSE))):
-    """Get couriers approved by Owner, waiting for Warehouse acceptance"""
-    cursor = db.couriers.find(
-        {
-            'owner_approved': True,
-            'accepted': {'$ne': True},
-            'rejected': {'$ne': True},
-            'status': 'owner_approved'
-        },
-        {'_id': 0}
-    ).sort('owner_approved_at', -1)
-    docs = await cursor.to_list(1000)
-    return [courier_doc_to_out(d) for d in docs]
-
-@api_router.patch("/couriers/{cid}/owner-approve", response_model=CourierOut)
-async def owner_approve_courier(
-    cid: str, 
-    body: AcceptCourierBody, 
-    user: dict = Depends(require_role(ROLE_OWNER))
-):
-    """Owner approves courier created by Cashier, sends to Warehouse queue"""
-    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Courier entry not found.")
-    
-    if doc.get('owner_approved'):
-        raise HTTPException(status_code=400, detail="Courier already approved by Owner.")
-    
-    now_iso = datetime.now(timezone.utc).isoformat()
-    await db.couriers.update_one({'id': cid}, {'$set': {
-        'owner_approved': bool(body.accepted),
-        'owner_approved_at': now_iso if body.accepted else None,
-        'owner_approved_by': user['full_name'] if body.accepted else None,
-        'status': 'owner_approved' if body.accepted else 'owner_rejected'
-    }})
-    
-    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
-    return courier_doc_to_out(updated)
-
-@api_router.patch("/couriers/{cid}/owner-reject", response_model=CourierOut)
-async def owner_reject_courier(
-    cid: str, 
-    body: RejectCourierBody, 
-    user: dict = Depends(require_role(ROLE_OWNER))
-):
-    """Owner rejects courier, sends back to Cashier for fixes"""
-    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Courier entry not found.")
-    
-    now_iso = datetime.now(timezone.utc).isoformat()
-    reason = (body.reason or '').strip()
-    
-    if not reason:
-        raise HTTPException(status_code=400, detail="Rejection reason is required.")
-    
-    print(f"DEBUG: Rejecting courier {cid} with reason: {reason}")
-    
-    await db.couriers.update_one(
-        {'id': cid}, 
-        {'$set': {
-            'owner_rejected': True,
-            'owner_rejected_reason': reason,
-            'owner_rejected_at': now_iso,
-            'owner_rejected_by': user['full_name'],
-            'status': 'owner_rejected',
-            'accepted': False,
-            'accepted_at': None,
-            'accepted_by': None,
-            'rejected': False,
-            'rejected_reason': None,
-            'rejected_at': None,
-            'rejected_by': None,
-            'owner_approved': False,
-            'owner_approved_at': None,
-            'owner_approved_by': None,
-        }}
-    )
-    
-    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
-    print(f"DEBUG: After update - owner_rejected_reason: {updated.get('owner_rejected_reason')}")
-    
-    return courier_doc_to_out(updated)
-
-# =========================
 # Parcel Routes (Incoming)
 # =========================
 @api_router.post("/parcels", response_model=ParcelOut, status_code=201)
@@ -502,7 +375,7 @@ async def parcels_summary(user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAR
     }
 
 # =========================
-# Courier Routes (Outgoing - Cashier creates with owner_approved=False)
+# Courier Routes (Outgoing - Cashier creates)
 # =========================
 @api_router.post("/couriers/batch", status_code=201)
 async def create_couriers_batch(body: CourierBatchCreate, user: dict = Depends(require_role(ROLE_CASHIER))):
@@ -545,9 +418,6 @@ async def create_couriers_batch(body: CourierBatchCreate, user: dict = Depends(r
             'created_at': now.isoformat(),
             'created_by': user['id'],
             'created_by_name': user['full_name'],
-            'owner_approved': False,
-            'owner_rejected': False,
-            'status': 'pending_owner_approval',
         }
         await db.couriers.insert_one(doc)
         created.append(courier_doc_to_out(doc))
@@ -559,65 +429,12 @@ async def list_couriers(user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHI
     docs = await cursor.to_list(1000)
     return [courier_doc_to_out(d) for d in docs]
 
-@api_router.get("/couriers/rejected", response_model=list[CourierOut])
-async def list_rejected_couriers(user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER))):
-    cursor = db.couriers.find({'rejected': True}, {'_id': 0}).sort('rejected_at', -1)
-    docs = await cursor.to_list(500)
-    return [courier_doc_to_out(d) for d in docs]
-
 @api_router.delete("/couriers/{cid}")
 async def delete_courier(cid: str, user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER, ROLE_WAREHOUSE))):
     res = await db.couriers.delete_one({'id': cid})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Courier entry not found.")
     return {"success": True, "id": cid}
-
-# =========================
-# Update Courier (for Cashier editing rejected couriers)
-# =========================
-@api_router.patch("/couriers/{cid}", response_model=CourierOut)
-async def update_courier(
-    cid: str, 
-    body: dict,
-    user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER, ROLE_WAREHOUSE))
-):
-    """Update courier fields - used by Cashier when editing rejected couriers"""
-    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Courier entry not found.")
-    
-    update_fields = {}
-    
-    allowed_fields = [
-        'courier_company', 'num_packages', 'handled_by', 
-        'payment_made', 'payment_mode', 'charges', 'vehicle',
-        'transport_charge', 'transport_vehicle', 'transport_payment_mode',
-        'slip_photo', 'package_photo'
-    ]
-    
-    for field in allowed_fields:
-        if field in body and body[field] is not None:
-            if field == 'num_packages':
-                update_fields[field] = int(body[field])
-            elif field in ['charges', 'transport_charge']:
-                if body[field] != "":
-                    update_fields[field] = float(body[field])
-                else:
-                    update_fields[field] = None
-            else:
-                update_fields[field] = body[field]
-        elif field in body and body[field] is None:
-            update_fields[field] = None
-        elif field in body and body[field] == "":
-            update_fields[field] = None
-    
-    if update_fields:
-        update_fields['updated_at'] = datetime.now(timezone.utc).isoformat()
-        update_fields['updated_by'] = user['full_name']
-        await db.couriers.update_one({'id': cid}, {'$set': update_fields})
-    
-    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
-    return courier_doc_to_out(updated)
 
 # =========================
 # Warehouse Checklist & Accept/Reject
@@ -627,16 +444,11 @@ async def accept_courier(cid: str, body: AcceptCourierBody, user: dict = Depends
     doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Courier entry not found.")
-    
-    if not doc.get('owner_approved'):
-        raise HTTPException(status_code=400, detail="Courier must be approved by Owner before Warehouse can accept.")
-    
     now_iso = datetime.now(timezone.utc).isoformat()
     update = {
         'accepted': bool(body.accepted),
         'accepted_at': now_iso if body.accepted else None,
         'accepted_by': user['full_name'] if body.accepted else None,
-        'status': 'warehouse_processing' if body.accepted else 'warehouse_rejected',
     }
     if body.accepted:
         update.update({'rejected': False, 'rejected_reason': None, 'rejected_at': None, 'rejected_by': None})
@@ -649,53 +461,12 @@ async def reject_courier(cid: str, body: RejectCourierBody, user: dict = Depends
     doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Courier entry not found.")
-    
-    if not doc.get('owner_approved'):
-        raise HTTPException(status_code=400, detail="Courier must be approved by Owner before Warehouse can reject.")
-    
-    if doc.get('sent_to_data_entry'):
-        raise HTTPException(status_code=400, detail="Courier already sent to Data Entry. Recall it first to reject.")
-    
     now_iso = datetime.now(timezone.utc).isoformat()
     reason = (body.reason or '').strip() or None
     await db.couriers.update_one({'id': cid}, {'$set': {
-        'rejected': True, 
-        'rejected_reason': reason, 
-        'rejected_at': now_iso, 
-        'rejected_by': user['full_name'],
-        'accepted': False, 
-        'accepted_at': None, 
-        'accepted_by': None, 
-        'sent_to_data_entry': False,
-        'status': 'warehouse_rejected',
+        'rejected': True, 'rejected_reason': reason, 'rejected_at': now_iso, 'rejected_by': user['full_name'],
+        'accepted': False, 'accepted_at': None, 'accepted_by': None, 'sent_to_data_entry': False,
     }})
-    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
-    return courier_doc_to_out(updated)
-
-@api_router.patch("/couriers/{cid}/resolve", response_model=CourierOut)
-async def resolve_courier_rejection(cid: str, user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER))):
-    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Courier entry not found.")
-    if not doc.get('rejected') and not doc.get('owner_rejected'):
-        raise HTTPException(status_code=400, detail="This courier is not flagged as rejected.")
-    
-    now_iso = datetime.now(timezone.utc).isoformat()
-    await db.couriers.update_one(
-        {'id': cid},
-        {'$set': {
-            'rejected': False,
-            'rejected_reason': None,
-            'rejected_resolved_at': now_iso,
-            'rejected_resolved_by': user['full_name'],
-            'accepted': False,
-            'accepted_at': None,
-            'accepted_by': None,
-            'owner_approved': False,
-            'owner_rejected': False,
-            'status': 'pending_owner_approval',
-        }},
-    )
     updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
     return courier_doc_to_out(updated)
 
@@ -720,84 +491,34 @@ async def add_courier_item(cid: str, body: CourierItemAdd, user: dict = Depends(
     doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Courier entry not found.")
-    
-    if not doc.get('accepted'):
-        raise HTTPException(status_code=400, detail="Accept the courier before adding items.")
-    
     checklist = _normalize_checklist(doc.get('checklist'))
     from config import COURIER_CHECKLIST_KEYS
     if not all(checklist.get(k) for k in COURIER_CHECKLIST_KEYS):
         raise HTTPException(status_code=400, detail="Complete the warehouse checklist before adding items.")
-    
     now_iso = datetime.now(timezone.utc).isoformat()
     products = _apply_item_into_products(list(doc.get('products', [])), body, now_iso)
     await db.couriers.update_one({'id': cid}, {'$set': {'products': products, 'items_updated_at': now_iso, 'items_updated_by': user['full_name']}})
     updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
     return courier_doc_to_out(updated)
 
-@api_router.post("/couriers/{cid}/items/batch", response_model=CourierOut, status_code=201)
-async def add_courier_items_batch(
-    cid: str,
-    body: CourierItemsBatchAdd,
-    user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE, ROLE_VERIFICATION))
-):
-    """Add multiple items to a courier at once"""
-    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Courier entry not found.")
-    
-    if not doc.get('accepted'):
-        raise HTTPException(status_code=400, detail="Accept the courier before adding items.")
-    
-    checklist = _normalize_checklist(doc.get('checklist'))
-    from config import COURIER_CHECKLIST_KEYS
-    if not all(checklist.get(k) for k in COURIER_CHECKLIST_KEYS):
-        raise HTTPException(status_code=400, detail="Complete the warehouse checklist before adding items.")
-    
-    now_iso = datetime.now(timezone.utc).isoformat()
-    products = list(doc.get('products', []))
-    
-    for item in body.items:
-        products = _apply_item_into_products(products, item, now_iso)
-    
-    await db.couriers.update_one(
-        {'id': cid}, 
-        {'$set': {
-            'products': products, 
-            'items_updated_at': now_iso, 
-            'items_updated_by': user['full_name']
-        }}
-    )
-    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
-    return courier_doc_to_out(updated)
-
 # =========================
 # Workflow: Send to Owner -> Forward to Data Entry -> Verification
 # =========================
-@api_router.patch("/couriers/{cid}/send-to-owner", response_model=CourierOut)
-async def send_courier_to_owner(cid: str, body: SendToDataEntryBody, user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE))):
+@api_router.patch("/couriers/{cid}/send-to-data-entry", response_model=CourierOut)
+async def send_courier_to_data_entry(cid: str, body: SendToDataEntryBody, user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE))):
     doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Courier entry not found.")
-    
-    if not doc.get('accepted'):
-        raise HTTPException(status_code=400, detail="Courier must be accepted first.")
-    
     if body.sent and not doc.get('products'):
         raise HTTPException(status_code=400, detail="Add at least one item before completing SOP.")
-    
     now_iso = datetime.now(timezone.utc).isoformat()
     update = {
         'sent_to_owner': bool(body.sent),
         'sent_to_owner_at': now_iso if body.sent else None,
         'sent_to_owner_by': user['full_name'] if body.sent else None,
-        'status': 'pending_owner_review' if body.sent else 'warehouse_processing',
     }
     if not body.sent:
         update['sent_to_data_entry'] = False
-        update['sent_to_data_entry_at'] = None
-        update['sent_to_data_entry_by'] = None
-    
     await db.couriers.update_one({'id': cid}, {'$set': update})
     updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
     return courier_doc_to_out(updated)
@@ -811,83 +532,24 @@ async def owner_forward_to_data_entry(cid: str, body: OwnerForwardBody, user: di
         raise HTTPException(status_code=400, detail="Courier has not been submitted by Warehouse yet.")
     if body.forward and not doc.get('products'):
         raise HTTPException(status_code=400, detail="Courier has no items to forward.")
-    
     now_iso = datetime.now(timezone.utc).isoformat()
     await db.couriers.update_one({'id': cid}, {'$set': {
         'sent_to_data_entry': bool(body.forward),
         'sent_to_data_entry_at': now_iso if body.forward else None,
         'sent_to_data_entry_by': user['full_name'] if body.forward else None,
-        'status': 'data_entry' if body.forward else 'pending_owner_review',
     }})
     updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
     return courier_doc_to_out(updated)
 
 @api_router.get("/owner/couriers/pending", response_model=list[CourierOut])
 async def list_owner_pending_couriers(user: dict = Depends(require_role(ROLE_OWNER))):
-    cursor = db.couriers.find(
-        {
-            'sent_to_owner': True,
-            '$or': [
-                {'sent_to_data_entry': {'$exists': False}},
-                {'sent_to_data_entry': False},
-            ],
-        },
-        {'_id': 0},
-    ).sort('sent_to_owner_at', -1)
+    cursor = db.couriers.find({'sent_to_owner': True, '$or': [{'sent_to_data_entry': {'$exists': False}}, {'sent_to_data_entry': False}]}, {'_id': 0}).sort('sent_to_owner_at', -1)
     docs = await cursor.to_list(1000)
     return [courier_doc_to_out(d) for d in docs]
 
-@api_router.patch("/couriers/{cid}/forward-to-data-entry", response_model=CourierOut)
-async def warehouse_forward_to_data_entry(
-    cid: str, 
-    body: SendToDataEntryBody, 
-    user: dict = Depends(require_role(ROLE_WAREHOUSE))
-):
-    """Warehouse forwards courier directly to Data Entry (after Owner approval)"""
-    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Courier entry not found.")
-    
-    # Check if owner approved
-    if not doc.get('owner_approved'):
-        raise HTTPException(status_code=400, detail="Courier must be approved by Owner first.")
-    
-    if not doc.get('accepted'):
-        raise HTTPException(status_code=400, detail="Courier must be accepted by Warehouse first.")
-    
-    if not doc.get('products'):
-        raise HTTPException(status_code=400, detail="Add at least one item before forwarding.")
-    
-    now_iso = datetime.now(timezone.utc).isoformat()
-    await db.couriers.update_one(
-        {'id': cid}, 
-        {'$set': {
-            'sent_to_data_entry': bool(body.sent),
-            'sent_to_data_entry_at': now_iso if body.sent else None,
-            'sent_to_data_entry_by': user['full_name'] if body.sent else None,
-            'sent_to_owner': True,  # Mark as sent to owner (for tracking)
-            'sent_to_owner_at': now_iso,
-            'sent_to_owner_by': user['full_name'],
-            'status': 'data_entry' if body.sent else 'warehouse_processing',
-        }}
-    )
-    
-    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
-    return courier_doc_to_out(updated)
-
-
 @api_router.get("/data-entry/couriers", response_model=list[CourierOut])
 async def list_data_entry_couriers(user: dict = Depends(require_role(ROLE_OWNER, ROLE_DATA_ENTRY))):
-    cursor = db.couriers.find(
-        {
-            'sent_to_data_entry': True,
-            '$or': [
-                {'ready_for_verification': {'$exists': False}},
-                {'ready_for_verification': False},
-            ],
-        },
-        {'_id': 0},
-    ).sort('sent_to_data_entry_at', -1)
+    cursor = db.couriers.find({'sent_to_data_entry': True, '$or': [{'ready_for_verification': {'$exists': False}}, {'ready_for_verification': False}]}, {'_id': 0}).sort('sent_to_data_entry_at', -1)
     docs = await cursor.to_list(2000)
     return [courier_doc_to_out(d) for d in docs]
 
@@ -898,12 +560,10 @@ async def update_item_data_entry(cid: str, item_id: str, body: CourierItemDataEn
         raise HTTPException(status_code=404, detail="Courier entry not found.")
     if not doc.get('sent_to_data_entry'):
         raise HTTPException(status_code=400, detail="This courier has not been sent to Data Entry yet.")
-    
     products = list(doc.get('products', []))
     idx = next((i for i, p in enumerate(products) if p.get('id') == item_id), -1)
     if idx == -1:
         raise HTTPException(status_code=404, detail="Item not found.")
-    
     update_fields = {}
     for f in ['supplier', 'invoice_number', 'invoice_date', 'transportation_method', 'transporter_name', 'hsn_code', 'unit', 'po_number', 'batch_number', 'expiry_date', 'remarks']:
         v = getattr(body, f)
@@ -915,21 +575,16 @@ async def update_item_data_entry(cid: str, item_id: str, body: CourierItemDataEn
             update_fields[f] = float(v)
     if body.data_entry_done is not None:
         update_fields['data_entry_done'] = bool(body.data_entry_done)
-    
     products[idx] = {**products[idx], **update_fields, 'data_entry_updated_at': datetime.now(timezone.utc).isoformat(), 'data_entry_updated_by': user['full_name']}
-    
     all_done = bool(products) and all(p.get('data_entry_done') for p in products)
     now_iso = datetime.now(timezone.utc).isoformat()
     set_payload = {'products': products}
     if all_done and not doc.get('ready_for_verification'):
         set_payload['ready_for_verification'] = True
         set_payload['ready_for_verification_at'] = now_iso
-        set_payload['status'] = 'ready_for_verification'
     elif not all_done and doc.get('ready_for_verification') and not doc.get('verification_complete'):
         set_payload['ready_for_verification'] = False
         set_payload['ready_for_verification_at'] = None
-        set_payload['status'] = 'data_entry'
-    
     await db.couriers.update_one({'id': cid}, {'$set': set_payload})
     updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
     return courier_doc_to_out(updated)
@@ -949,12 +604,10 @@ async def update_item_verification(cid: str, item_id: str, body: VerificationIte
         raise HTTPException(status_code=400, detail="This courier is not ready for verification yet.")
     if doc.get('verification_complete'):
         raise HTTPException(status_code=400, detail="Courier verification is already complete and locked.")
-    
     products = list(doc.get('products', []))
     idx = next((i for i, p in enumerate(products) if p.get('id') == item_id), -1)
     if idx == -1:
         raise HTTPException(status_code=404, detail="Item not found.")
-    
     now_iso = datetime.now(timezone.utc).isoformat()
     new_item = {**products[idx]}
     if body.clear_manual:
@@ -973,7 +626,6 @@ async def update_item_verification(cid: str, item_id: str, body: VerificationIte
         else:
             new_item['verified_at'] = None
             new_item['verified_by'] = None
-    
     products[idx] = new_item
     await db.couriers.update_one({'id': cid}, {'$set': {'products': products}})
     updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
@@ -993,99 +645,34 @@ async def complete_courier_verification(cid: str, body: CompleteVerificationBody
         if not all(p.get('verification_done') for p in products):
             missing = sum(1 for p in products if not p.get('verification_done'))
             raise HTTPException(status_code=400, detail=f"Verify all items first ({missing} pending).")
-    
     now_iso = datetime.now(timezone.utc).isoformat()
     await db.couriers.update_one({'id': cid}, {'$set': {
         'verification_complete': bool(body.complete),
         'verification_complete_at': now_iso if body.complete else None,
         'verification_complete_by': user['full_name'] if body.complete else None,
-        'status': 'completed' if body.complete else 'ready_for_verification',
     }})
     updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
     return courier_doc_to_out(updated)
 
-
-@api_router.patch("/couriers/{cid}/complete-verification", response_model=CourierOut)
-async def complete_courier_verification(cid: str, body: CompleteVerificationBody, user: dict = Depends(require_role(ROLE_OWNER, ROLE_VERIFICATION))):
-    doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Courier entry not found.")
-    if not doc.get('ready_for_verification'):
-        raise HTTPException(status_code=400, detail="This courier is not ready for verification yet.")
-    if body.complete:
-        products = doc.get('products', [])
-        if not products:
-            raise HTTPException(status_code=400, detail="Courier has no items to verify.")
-        if not all(p.get('verification_done') for p in products):
-            missing = sum(1 for p in products if not p.get('verification_done'))
-            raise HTTPException(status_code=400, detail=f"Verify all items first ({missing} pending).")
-    
-    now_iso = datetime.now(timezone.utc).isoformat()
-    await db.couriers.update_one({'id': cid}, {'$set': {
-        'verification_complete': bool(body.complete),
-        'verification_complete_at': now_iso if body.complete else None,
-        'verification_complete_by': user['full_name'] if body.complete else None,
-        'status': 'completed' if body.complete else 'ready_for_verification',
-    }})
-    updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
-    return courier_doc_to_out(updated)
-
-# =========================
-# Owner Analytics
-# =========================
 @api_router.get("/owner/analytics")
 async def owner_analytics(user: dict = Depends(require_role(ROLE_OWNER))):
     total = await db.couriers.count_documents({})
     rejected = await db.couriers.count_documents({'rejected': True})
-    pending_cashier = await db.couriers.count_documents({
-        'owner_approved': False,
-        'owner_rejected': {'$ne': True},
-        'status': 'pending_owner_approval'
-    })
-    pending_warehouse = await db.couriers.count_documents({
-        'owner_approved': True,
-        'accepted': {'$ne': True},
-        'rejected': {'$ne': True},
-        'status': 'owner_approved'
-    })
-    pending_owner_review = await db.couriers.count_documents({
-        'sent_to_owner': True,
-        '$or': [
-            {'sent_to_data_entry': {'$exists': False}},
-            {'sent_to_data_entry': False},
-        ],
-    })
+    pending_warehouse = await db.couriers.count_documents({'accepted': True, '$or': [{'sent_to_owner': {'$exists': False}}, {'sent_to_owner': False}], 'rejected': False})
+    pending_owner = await db.couriers.count_documents({'sent_to_owner': True, '$or': [{'sent_to_data_entry': {'$exists': False}}, {'sent_to_data_entry': False}]})
     in_data_entry = await db.couriers.count_documents({'sent_to_data_entry': True})
-    ready_verification = await db.couriers.count_documents({
-        'ready_for_verification': True,
-        '$or': [
-            {'verification_complete': {'$exists': False}},
-            {'verification_complete': False},
-        ],
-    })
+    ready_verification = await db.couriers.count_documents({'ready_for_verification': True, '$or': [{'verification_complete': {'$exists': False}}, {'verification_complete': False}]})
     verified = await db.couriers.count_documents({'verification_complete': True})
-    
     pipeline = [{'$unwind': {'path': '$products', 'preserveNullAndEmptyArrays': False}}, {'$group': {'_id': None, 'items': {'$sum': 1}, 'units': {'$sum': {'$ifNull': ['$products.quantity', 0]}}, 'damaged': {'$sum': {'$ifNull': ['$products.damaged_count', 0]}}}}]
     agg = await db.couriers.aggregate(pipeline).to_list(1)
     item_stats = agg[0] if agg else {'items': 0, 'units': 0, 'damaged': 0}
-    
     return {
-        'total_couriers': total,
-        'pending_cashier': pending_cashier,
-        'pending_warehouse': pending_warehouse,
-        'pending_owner_review': pending_owner_review,
-        'in_data_entry': in_data_entry,
-        'ready_verification': ready_verification,
-        'verified': verified,
-        'rejected_open': rejected,
-        'total_items': int(item_stats.get('items', 0)),
-        'total_units': int(item_stats.get('units', 0)),
-        'damaged_units': int(item_stats.get('damaged', 0)),
+        'total_couriers': total, 'pending_warehouse': pending_warehouse, 'pending_owner_review': pending_owner,
+        'in_data_entry': in_data_entry, 'ready_verification': ready_verification, 'verified': verified,
+        'rejected_open': rejected, 'total_items': int(item_stats.get('items', 0)),
+        'total_units': int(item_stats.get('units', 0)), 'damaged_units': int(item_stats.get('damaged', 0)),
     }
 
-# =========================
-# Inventory
-# =========================
 @api_router.get("/inventory/items")
 async def list_inventory_items(user: dict = Depends(require_role(ROLE_OWNER, ROLE_WAREHOUSE, ROLE_VERIFICATION))):
     cursor = db.couriers.find({}, {'_id': 0}).sort('created_at', -1)
@@ -1102,16 +689,10 @@ async def list_inventory_items(user: dict = Depends(require_role(ROLE_OWNER, ROL
                 except Exception:
                     p_created = None
             rows.append({
-                'item_id': p.get('id'), 
-                'name': p.get('name'), 
-                'quantity': int(p.get('quantity', 0)),
-                'photo': p.get('photo'), 
-                'damaged': bool(p.get('damaged', False)),
-                'damaged_count': int(p.get('damaged_count', 0)), 
-                'created_at': p_created,
-                'courier_id': courier_id, 
-                'courier_number': courier_number, 
-                'courier_company': courier_company,
+                'item_id': p.get('id'), 'name': p.get('name'), 'quantity': int(p.get('quantity', 0)),
+                'photo': p.get('photo'), 'damaged': bool(p.get('damaged', False)),
+                'damaged_count': int(p.get('damaged_count', 0)), 'created_at': p_created,
+                'courier_id': courier_id, 'courier_number': courier_number, 'courier_company': courier_company,
             })
     rows.sort(key=lambda r: r.get('created_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
     return rows
