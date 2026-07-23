@@ -212,6 +212,16 @@ class CourierOut(BaseModel):
     created_at: datetime
     created_by_name: str
 
+       # Add these:
+    upload_list_text: Optional[str] = None
+    upload_list_photo: Optional[str] = None
+    upload_list_type: Optional[str] = None
+    upload_list_name: Optional[str] = None
+    upload_list_mime: Optional[str] = None
+    invoice_photo: Optional[str] = None
+    invoice_name: Optional[str] = None
+    invoice_mime: Optional[str] = None
+
 
     
 class CourierPatch(BaseModel):

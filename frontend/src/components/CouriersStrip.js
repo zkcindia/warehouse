@@ -16,7 +16,6 @@ import {
   ClipboardCheck,
   PackagePlus,
   FileText,
-  CheckCircle2,
   Package,
   Image as ImageIcon,
   Check,
@@ -25,6 +24,9 @@ import {
   X,
   XCircle,
   AlertTriangle,
+  Paperclip,
+  List,
+  Image,
 } from "lucide-react";
 
 function ActionBtn({
@@ -46,6 +48,7 @@ function ActionBtn({
       "bg-emerald-50 border border-emerald-200 text-emerald-700 cursor-default",
     complete: "bg-emerald-50 border border-emerald-200 text-emerald-700",
     sop: "bg-neutral-900 border border-neutral-900 text-white hover:bg-neutral-800",
+    viewList: "bg-amber-600 border border-amber-600 text-white hover:bg-amber-700",
   };
   return (
     <button
@@ -68,11 +71,107 @@ function ActionBtn({
   );
 }
 
+// Document Viewer Modal for List (With Rate / Without Rate)
+function ListViewerModal({ courier, onClose }) {
+  if (!courier) return null;
+
+  const hasListText = !!courier.upload_list_text;
+  const hasListImages = courier.upload_list_images && courier.upload_list_images.length > 0;
+  const listType = courier.upload_list_type;
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 bg-gradient-to-r from-amber-600 to-orange-600 text-white">
+          <div className="flex items-center gap-2">
+            <List className="w-5 h-5" />
+            <div>
+              <div className="text-sm font-semibold">
+                {listType === 'with_rate' ? 'List With Rate' : listType === 'without_rate' ? 'List Without Rate' : 'Uploaded List'}
+              </div>
+              <div className="text-xs text-amber-200">{courier.courier_number}</div>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/10">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {/* List Text */}
+          {hasListText && (
+            <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+              <div className="flex items-center gap-2 mb-3">
+                <FileText className="w-5 h-5 text-blue-600" />
+                <span className="text-sm font-semibold text-blue-700">List Text</span>
+              </div>
+              <div className="bg-white rounded-lg p-4 text-sm text-neutral-700 whitespace-pre-wrap max-h-96 overflow-y-auto border border-blue-100">
+                {courier.upload_list_text}
+              </div>
+            </div>
+          )}
+
+          {/* List Images */}
+          {hasListImages && (
+            <div className="bg-purple-50 rounded-xl p-4 border border-purple-200">
+              <div className="flex items-center gap-2 mb-3">
+                <Image className="w-5 h-5 text-purple-600" />
+                <span className="text-sm font-semibold text-purple-700">
+                  Uploaded Images ({courier.upload_list_images.length})
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {courier.upload_list_images.map((img, idx) => (
+                  <div
+                    key={idx}
+                    className="relative border border-purple-200 rounded-lg overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => window.open(img.photo, '_blank')}
+                  >
+                    <img
+                      src={img.photo}
+                      alt={img.name || `Image ${idx + 1}`}
+                      className="w-full h-40 object-cover"
+                    />
+                    <div className="p-2 text-[10px] text-neutral-600 truncate bg-white/80">
+                      {img.name || `Image ${idx + 1}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* No Documents */}
+          {!hasListText && !hasListImages && (
+            <div className="text-center text-neutral-500 py-8">
+              <Paperclip className="w-12 h-12 mx-auto mb-3 text-neutral-300" />
+              <p>No list documents have been uploaded by Owner yet.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-neutral-100 bg-neutral-50">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CouriersStrip({ onCouriersChange }) {
   const { API, authHeaders } = useAuth();
   const [couriers, setCouriers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  const [viewingList, setViewingList] = useState(null);
 
   // Modal states
   const [viewing, setViewing] = useState(null);
@@ -80,25 +179,23 @@ export default function CouriersStrip({ onCouriersChange }) {
   const [checklistFor, setChecklistFor] = useState(null);
   const [itemsFor, setItemsFor] = useState(null);
   const [sopFor, setSopFor] = useState(null);
-  const [rejectFor, setRejectFor] = useState(null); // courier obj for initial-stage reject
+  const [rejectFor, setRejectFor] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
 
-// In CouriersStrip.jsx, update the load function
-const load = useCallback(async () => {
-  setLoading(true);
-  try {
-    // Change this endpoint
-    const res = await axios.get(`${API}/warehouse/pending-couriers`, {
-      headers: authHeaders(),
-    });
-    setCouriers(res.data || []);
-  } catch (e) {
-    // silent
-  } finally {
-    setLoading(false);
-  }
-}, [API, authHeaders]);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await axios.get(`${API}/warehouse/pending-couriers`, {
+        headers: authHeaders(),
+      });
+      setCouriers(res.data || []);
+    } catch (e) {
+      // silent
+    } finally {
+      setLoading(false);
+    }
+  }, [API, authHeaders]);
 
   useEffect(() => {
     load();
@@ -162,6 +259,11 @@ const load = useCallback(async () => {
     }
   };
 
+  // Check if courier has a list (with_rate or without_rate)
+  const hasList = (c) => {
+    return !!(c.upload_list_text || (c.upload_list_images && c.upload_list_images.length > 0));
+  };
+
   return (
     <div className="bg-white border border-neutral-200 rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">
@@ -213,6 +315,8 @@ const load = useCallback(async () => {
             const checklistDone = cp.complete;
             const hasItems = (c.products?.length || 0) > 0;
             const photo = c.slip_photo || c.package_photo;
+            const showViewList = hasList(c);
+            
             return (
               <div
                 key={c.id}
@@ -258,6 +362,11 @@ const load = useCallback(async () => {
                           <Lock className="w-3 h-3" /> Sent to Owner
                         </span>
                       ) : null}
+                      {showViewList && !accepted && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                          <Paperclip className="w-3 h-3" /> Has list
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 text-[12px] text-neutral-500">
                       <span className="inline-flex items-center gap-1">
@@ -284,6 +393,17 @@ const load = useCallback(async () => {
 
                   {!accepted ? (
                     <>
+                      {/* View List Button - Shows BEFORE Accept if list exists */}
+                      {showViewList && (
+                        <ActionBtn
+                          icon={List}
+                          label="View List"
+                          onClick={() => setViewingList(c)}
+                          variant="viewList"
+                          testId={`row-viewlist-${c.courier_number}`}
+                        />
+                      )}
+                      
                       <ActionBtn
                         icon={Check}
                         label="Accept"
@@ -361,6 +481,14 @@ const load = useCallback(async () => {
             );
           })}
         </div>
+      )}
+
+      {/* List Viewer Modal */}
+      {viewingList && (
+        <ListViewerModal
+          courier={viewingList}
+          onClose={() => setViewingList(null)}
+        />
       )}
 
       {/* Modals */}

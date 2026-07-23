@@ -17,19 +17,14 @@ export default function WarehouseDashboard() {
             <Boxes className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xs uppercase tracking-wider text-neutral-400">
-              Warehouse Staff
-            </div>
+
             <div
               className="text-2xl font-semibold tracking-tight text-neutral-900"
               data-testid="welcome-heading"
             >
               Warehouse workspace
             </div>
-            <div className="text-sm text-neutral-500">
-              Hi {user?.full_name?.split(" ")[0] || "there"}, accept couriers →
-              run checklist → add items → SOP review → send to Data Entry.
-            </div>
+
           </div>
         </div>
 

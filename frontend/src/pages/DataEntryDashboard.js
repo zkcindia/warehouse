@@ -12,35 +12,46 @@ import {
   CheckCircle2,
   AlertCircle,
   Search,
-  Image as ImageIcon,
-  IndianRupee,
-  Hash,
-  Calendar,
-  Tag,
-  Building2,
   ChevronRight,
   X,
-  Boxes,
   ChevronDown,
   ChevronUp,
   Save,
-  Eye,
-  Filter,
-  ArrowLeft,
-  ArrowRight,
-  Percent,
-  DollarSign,
   FileText,
+  Paperclip,
+  List,
+  Eye,
+  Image,
+  Receipt,
+  Tag,
+  Download,
+  IndianRupee,
+  Hash,
+  Building2,
+  Calendar,
+  User,
+  CreditCard,
+  Boxes,
+  Layers,
+  Grid,
+  Clock,
+  ChevronLeft,
+  ChevronRight as ChevronRightIcon,
 } from "lucide-react";
+import DataEntryTableModal from "@/components/dataentrypages/DataEntryTableModal";
+import ProductDetailsModal from "@/components/dataentrypages/ProductDetailsModal";
 
 const PAGE_SIZE = 25;
+const PRODUCT_PAGE_SIZE = 20;
 
+// StatTile Component
 function StatTile({ icon: Icon, label, value, accent = "neutral" }) {
   const accents = {
     neutral: "bg-neutral-50 text-neutral-700 border-neutral-200",
     blue: "bg-blue-50 text-blue-700 border-blue-200",
     emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
     amber: "bg-amber-50 text-amber-700 border-amber-200",
+    purple: "bg-purple-50 text-purple-700 border-purple-200",
   };
   return (
     <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${accents[accent]}`}>
@@ -55,522 +66,173 @@ function StatTile({ icon: Icon, label, value, accent = "neutral" }) {
   );
 }
 
-function ProgressBar({ done, total }) {
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  const complete = total > 0 && done === total;
-  return (
-    <div className="flex items-center gap-2 min-w-0">
-      <div className="h-1.5 w-24 bg-neutral-100 rounded-full overflow-hidden">
-        <div className={`h-full transition-all ${complete ? "bg-emerald-500" : "bg-blue-500"}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-[11px] font-medium text-neutral-600 font-mono">{done}/{total}</span>
-    </div>
-  );
-}
-
-function CourierRow({ courier, onOpen, index }) {
-  const items = courier.products || [];
-  const done = courier.data_entry_done_count || 0;
-  const total = items.length;
-  const pending = total - done;
-  const allDone = pending === 0 && total > 0;
-  
-  return (
-    <div className="grid grid-cols-[1fr_140px_180px_120px_120px] gap-3 items-center px-4 py-2.5 border-t border-neutral-100 hover:bg-neutral-50/60 transition-colors">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] font-mono text-neutral-400">#{index + 1}</span>
-          <span className="text-sm font-mono font-semibold text-neutral-900">{courier.courier_number}</span>
-          {courier.courier_company && (
-            <span className="inline-flex items-center gap-1 text-[11px] text-neutral-500 truncate">
-              <Truck className="w-3 h-3" /> {courier.courier_company}
-            </span>
-          )}
-        </div>
-        {courier.sent_to_data_entry_at && (
-          <div className="text-[11px] text-neutral-400 mt-0.5">sent {new Date(courier.sent_to_data_entry_at).toLocaleString()}</div>
-        )}
-      </div>
-      <div className="text-[12px] text-neutral-700">
-        <span className="font-semibold">{courier.num_packages}</span> <span className="text-neutral-400">pkgs</span>
-      </div>
-      <div><ProgressBar done={done} total={total} /></div>
-      <div>
-        {allDone ? (
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <CheckCircle2 className="w-3 h-3" /> ready
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
-            <AlertCircle className="w-3 h-3" /> {pending} pending
-          </span>
-        )}
-      </div>
-      <button
-        onClick={() => onOpen(courier)}
-        disabled={allDone}
-        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium justify-self-end ${
-          allDone 
-            ? "bg-emerald-100 text-emerald-700 cursor-not-allowed" 
-            : "bg-neutral-900 text-white hover:bg-neutral-800"
-        }`}
-      >
-        {allDone ? "Completed" : "Enter data"}
-        {!allDone && <ChevronRight className="w-3.5 h-3.5" />}
-      </button>
-    </div>
-  );
-}
-
-// Main Data Entry Table Modal - Products disappear when marked done
-function DataEntryTableModal({ courier, onClose, onUpdated }) {
-  const { API, authHeaders } = useAuth();
-  const [items, setItems] = useState([]);
-  const [savingItemId, setSavingItemId] = useState(null);
-  const [currentPage, setCurrentPage] = useState(0);
-  const itemsPerPage = 5;
-
-  useEffect(() => {
-    if (courier) {
-      setItems(courier.products || []);
-    }
-  }, [courier]);
-
-  const pendingItems = items.filter(item => !item.data_entry_done);
-  const completedItems = items.filter(item => item.data_entry_done);
-  const totalItems = items.length;
-  const doneCount = completedItems.length;
-  const pendingCount = pendingItems.length;
-
-  useEffect(() => {
-    setCurrentPage(0);
-  }, [pendingCount]);
-
+// ============= LIST VIEWER MODAL =============
+function ListViewerModal({ courier, onClose }) {
   if (!courier) return null;
 
-  const totalPages = Math.ceil(pendingItems.length / itemsPerPage);
-  const currentItems = pendingItems.slice(
-    currentPage * itemsPerPage,
-    (currentPage + 1) * itemsPerPage
-  );
-  const allDone = totalItems > 0 && pendingCount === 0;
-
-
-
-  const handleFieldChange = (itemId, field, value) => {
-    setItems(prev => prev.map(item => 
-      item.id === itemId ? { ...item, [field]: value } : item
-    ));
-  };
-
-  const autoCalculate = (item) => {
-    const costPerUnit = parseFloat(item.cost_per_unit) || 0;
-    const gstPercent = parseFloat(item.gst_percent) || 0;
-    const gstAmount = (costPerUnit * gstPercent) / 100;
-    
-    handleFieldChange(item.id, 'gst_amount', gstAmount.toFixed(2));
-    if (item.quantity) {
-      handleFieldChange(item.id, 'total_invoice_amount', ((costPerUnit + gstAmount) * item.quantity).toFixed(2));
-    }
-  };
-
-  const saveItem = async (item) => {
-    setSavingItemId(item.id);
-    try {
-      const payload = {
-        supplier: item.supplier || null,
-        invoice_number: item.invoice_number || null,
-        invoice_date: item.invoice_date || null,
-        transportation_method: item.transportation_method || null,
-        transporter_name: item.transporter_name || null,
-        transportation_cost: item.transportation_cost ? parseFloat(item.transportation_cost) : null,
-        gst_percent: item.gst_percent ? parseFloat(item.gst_percent) : null,
-        total_invoice_amount: item.total_invoice_amount ? parseFloat(item.total_invoice_amount) : null,
-        cost_per_unit: item.cost_per_unit ? parseFloat(item.cost_per_unit) : null,
-        gst_amount: item.gst_amount ? parseFloat(item.gst_amount) : null,
-        hsn_code: item.hsn_code || null,
-        unit: item.unit || null,
-        po_number: item.po_number || null,
-        batch_number: item.batch_number || null,
-        mrp: item.mrp ? parseFloat(item.mrp) : null,
-        discount_percent: item.discount_percent ? parseFloat(item.discount_percent) : null,
-        igst_percent: item.igst_percent ? parseFloat(item.igst_percent) : null,
-        expiry_date: item.expiry_date || null,
-        remarks: item.remarks || null,
-      };
-
-      const res = await axios.patch(
-        `${API}/couriers/${courier.id}/items/${item.id}/data-entry`,
-        payload,
-        { headers: authHeaders() }
-      );
-      
-      toast.success(`${item.name} saved`);
-      // Update the item in state
-      const updatedItem = res.data.products?.find(p => p.id === item.id);
-      if (updatedItem) {
-        setItems(prev => prev.map(i => i.id === item.id ? updatedItem : i));
-      }
-      onUpdated?.(res.data);
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "Failed to save");
-    } finally {
-      setSavingItemId(null);
-    }
-  };
-
-  const markComplete = async (item) => {
-    setSavingItemId(item.id);
-    try {
-      const res = await axios.patch(
-        `${API}/couriers/${courier.id}/items/${item.id}/data-entry`,
-        { data_entry_done: true },
-        { headers: authHeaders() }
-      );
-      toast.success(`${item.name} marked as complete`);
-      
-      // Update local state - this will remove the item from pending list
-      const updatedItem = res.data.products?.find(p => p.id === item.id);
-      if (updatedItem) {
-        setItems(prev => prev.map(i => i.id === item.id ? updatedItem : i));
-      }
-      
-      onUpdated?.(res.data);
-      
-      // If all items are done, close modal after a short delay
-      const newPendingCount = (res.data.products?.filter(p => !p.data_entry_done).length || 0);
-      if (newPendingCount === 0 && res.data.products?.length > 0) {
-        toast.success("All items completed! Moving to verification...");
-        setTimeout(() => {
-          onClose();
-        }, 1500);
-      }
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "Failed to mark complete");
-    } finally {
-      setSavingItemId(null);
-    }
-  };
+  const hasListText = !!courier.upload_list_text;
+  const hasListImages = courier.upload_list_images && courier.upload_list_images.length > 0;
+  const listType = courier.upload_list_type;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-[98vw] bg-white rounded-2xl shadow-2xl border border-neutral-200 max-h-[94vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-start justify-between px-6 py-5 border-b border-neutral-100 bg-gradient-to-r from-blue-900 to-blue-800 text-white">
-          <div className="min-w-0">
-            <div className="text-xs uppercase tracking-wider text-blue-200 flex items-center gap-1.5">
-              <ClipboardList className="w-3.5 h-3.5" /> Data Entry
-            </div>
-            <div className="flex items-center gap-3 mt-1 flex-wrap">
-              <div className="text-xl font-bold font-mono">{courier.courier_number}</div>
-              {courier.courier_company && (
-                <span className="inline-flex items-center gap-1 text-xs text-blue-200">
-                  <Truck className="w-3.5 h-3.5" /> {courier.courier_company}
-                </span>
-              )}
-            </div>
-            <div className="text-xs text-blue-200 mt-1">
-              {courier.num_packages} packages · {totalItems} items · {doneCount} completed · {pendingCount} pending
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+          <div className="flex items-center gap-2">
+            <List className="w-5 h-5" />
+            <div>
+              <div className="text-sm font-semibold">
+                {listType === 'with_rate' ? 'List With Rate' : listType === 'without_rate' ? 'List Without Rate' : 'Uploaded List'}
+              </div>
+              <div className="text-xs text-blue-200">{courier.courier_number}</div>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors">
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/10">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Progress Bar */}
-        <div className="px-6 py-3 bg-neutral-50 border-b border-neutral-200">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs text-neutral-600">Overall Progress</span>
-            <span className="text-xs font-medium text-blue-600">{doneCount}/{totalItems} items completed</span>
-          </div>
-          <div className="h-2 bg-neutral-200 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-600 transition-all" style={{ width: `${(doneCount / totalItems) * 100}%` }} />
-          </div>
-          {pendingCount === 0 && totalItems > 0 && (
-            <div className="mt-2 text-xs text-emerald-600 flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" /> All items completed! Closing automatically...
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {hasListText && (
+            <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+              <div className="flex items-center gap-2 mb-3">
+                <FileText className="w-5 h-5 text-blue-600" />
+                <span className="text-sm font-semibold text-blue-700">List Text</span>
+              </div>
+              <div className="bg-white rounded-lg p-4 text-sm text-neutral-700 whitespace-pre-wrap max-h-96 overflow-y-auto border border-blue-100">
+                {courier.upload_list_text}
+              </div>
+            </div>
+          )}
+
+          {hasListImages && (
+            <div className="bg-purple-50 rounded-xl p-4 border border-purple-200">
+              <div className="flex items-center gap-2 mb-3">
+                <Image className="w-5 h-5 text-purple-600" />
+                <span className="text-sm font-semibold text-purple-700">
+                  Uploaded Images ({courier.upload_list_images.length})
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {courier.upload_list_images.map((img, idx) => (
+                  <div
+                    key={idx}
+                    className="relative border border-purple-200 rounded-lg overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => window.open(img.photo, '_blank')}
+                  >
+                    <img
+                      src={img.photo}
+                      alt={img.name || `Image ${idx + 1}`}
+                      className="w-full h-40 object-cover"
+                    />
+                    <div className="p-2 text-[10px] text-neutral-600 truncate bg-white/80">
+                      {img.name || `Image ${idx + 1}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!hasListText && !hasListImages && (
+            <div className="text-center text-neutral-500 py-8">
+              <Paperclip className="w-12 h-12 mx-auto mb-3 text-neutral-300" />
+              <p>No list documents have been uploaded by Owner yet.</p>
             </div>
           )}
         </div>
 
-        {/* Table View - Only showing PENDING items */}
-        <div className="flex-1 overflow-auto p-4">
-          {pendingCount === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-center">
-              <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mb-4">
-                <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-neutral-100 bg-neutral-50">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============= INVOICE/CHALLAN VIEWER MODAL =============
+function InvoiceViewerModal({ courier, onClose }) {
+  if (!courier) return null;
+
+  const downloadInvoice = async () => {
+    if (!courier.invoice_photo) return;
+    try {
+      const response = await fetch(courier.invoice_photo);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = courier.invoice_name || `invoice_${courier.courier_number}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('Invoice downloaded');
+    } catch (error) {
+      toast.error('Failed to download invoice');
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 bg-gradient-to-r from-green-600 to-green-700 text-white">
+          <div className="flex items-center gap-2">
+            <Receipt className="w-5 h-5" />
+            <div>
+              <div className="text-sm font-semibold">Uploaded Invoice / Challan</div>
+              <div className="text-xs text-green-200">{courier.courier_number}</div>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/10">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6">
+          {courier.invoice_photo ? (
+            <div>
+              <div className="flex justify-end mb-3">
+                <button
+                  onClick={downloadInvoice}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm hover:bg-green-700 transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Download Invoice
+                </button>
               </div>
-              <h3 className="text-lg font-semibold text-neutral-900">All Done!</h3>
-              <p className="text-sm text-neutral-500 mt-1">All items have been completed for this courier.</p>
-              <p className="text-xs text-neutral-400 mt-2">Closing automatically...</p>
+              <div className="flex justify-center">
+                <img
+                  src={courier.invoice_photo}
+                  alt="Invoice"
+                  className="max-w-full max-h-[70vh] rounded-lg border border-green-200 object-contain"
+                />
+              </div>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1400px] border-collapse">
-                <thead className="sticky top-0 z-10 bg-neutral-100">
-                  <tr className="border-b-2 border-neutral-200">
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-neutral-700 w-12">#</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-neutral-700 w-44">Product</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-neutral-700 w-32">Supplier</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-neutral-700 w-28">Invoice No</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-neutral-700 w-24">Invoice Date</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-neutral-700 w-24">PO Number</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-neutral-700 w-24">Cost/Unit</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-neutral-700 w-20">GST%</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-neutral-700 w-28">HSN Code</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-neutral-700 w-20">Unit</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-neutral-700 w-28">Batch No</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-neutral-700 w-28">Expiry Date</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-neutral-700 w-24">Transport Method</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-neutral-700 w-24">Transport Cost</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-neutral-700 w-32">Remarks</th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-neutral-700 w-20">Status</th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-neutral-700 w-24">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentItems.map((item, idx) => {
-                    const isSaving = savingItemId === item.id;
-                    
-                    return (
-                      <tr key={item.id} className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
-                        <td className="px-3 py-3 text-sm text-neutral-600">{currentPage * itemsPerPage + idx + 1}</td>
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-2">
-                            {item.photo ? (
-                              <img src={item.photo} alt={item.name} className="w-8 h-8 rounded object-cover" />
-                            ) : (
-                              <div className="w-8 h-8 rounded bg-neutral-100 flex items-center justify-center">
-                                <Package className="w-4 h-4 text-neutral-400" />
-                              </div>
-                            )}
-                            <div>
-                              <div className="font-medium text-sm text-neutral-900">{item.name}</div>
-                              <div className="text-xs text-neutral-500">Qty: {item.quantity}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3">
-                          <input
-                            type="text"
-                            value={item.supplier || ''}
-                            onChange={(e) => handleFieldChange(item.id, 'supplier', e.target.value)}
-                            className="w-full px-2 py-1.5 border border-neutral-200 rounded-lg text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-                            placeholder="—"
-                          />
-                        </td>
-                        <td className="px-3 py-3">
-                          <input
-                            type="text"
-                            value={item.invoice_number || ''}
-                            onChange={(e) => handleFieldChange(item.id, 'invoice_number', e.target.value)}
-                            className="w-full px-2 py-1.5 border border-neutral-200 rounded-lg text-sm font-mono focus:border-blue-400"
-                            placeholder="—"
-                          />
-                        </td>
-                        <td className="px-3 py-3">
-                          <input
-                            type="date"
-                            value={item.invoice_date || ''}
-                            onChange={(e) => handleFieldChange(item.id, 'invoice_date', e.target.value)}
-                            className="w-full px-2 py-1.5 border border-neutral-200 rounded-lg text-sm focus:border-blue-400"
-                          />
-                        </td>
-                        <td className="px-3 py-3">
-                          <input
-                            type="text"
-                            value={item.po_number || ''}
-                            onChange={(e) => handleFieldChange(item.id, 'po_number', e.target.value)}
-                            className="w-full px-2 py-1.5 border border-neutral-200 rounded-lg text-sm font-mono focus:border-blue-400"
-                            placeholder="—"
-                          />
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-neutral-400 text-xs">₹</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={item.cost_per_unit || ''}
-                              onChange={(e) => {
-                                handleFieldChange(item.id, 'cost_per_unit', e.target.value);
-                                autoCalculate({ ...item, cost_per_unit: e.target.value });
-                              }}
-                              className="w-full pl-6 pr-2 py-1.5 border border-neutral-200 rounded-lg text-sm focus:border-blue-400"
-                              placeholder="0.00"
-                            />
-                          </div>
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="relative">
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={item.gst_percent || ''}
-                              onChange={(e) => {
-                                handleFieldChange(item.id, 'gst_percent', e.target.value);
-                                autoCalculate({ ...item, gst_percent: e.target.value });
-                              }}
-                              className="w-full px-2 py-1.5 border border-neutral-200 rounded-lg text-sm focus:border-blue-400"
-                              placeholder="18"
-                            />
-                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 text-xs">%</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3">
-                          <input
-                            type="text"
-                            value={item.hsn_code || ''}
-                            onChange={(e) => handleFieldChange(item.id, 'hsn_code', e.target.value)}
-                            className="w-full px-2 py-1.5 border border-neutral-200 rounded-lg text-sm font-mono focus:border-blue-400"
-                            placeholder="—"
-                          />
-                        </td>
-                        <td className="px-3 py-3">
-                          <select
-                            value={item.unit || ''}
-                            onChange={(e) => handleFieldChange(item.id, 'unit', e.target.value)}
-                            className="w-full px-2 py-1.5 border border-neutral-200 rounded-lg text-sm focus:border-blue-400"
-                          >
-                            <option value="">—</option>
-                            <option value="pcs">Pieces</option>
-                            <option value="kg">KG</option>
-                            <option value="gram">Gram</option>
-                            <option value="liter">Liter</option>
-                            <option value="meter">Meter</option>
-                            <option value="box">Box</option>
-                            <option value="dozen">Dozen</option>
-                          </select>
-                        </td>
-                        <td className="px-3 py-3">
-                          <input
-                            type="text"
-                            value={item.batch_number || ''}
-                            onChange={(e) => handleFieldChange(item.id, 'batch_number', e.target.value)}
-                            className="w-full px-2 py-1.5 border border-neutral-200 rounded-lg text-sm font-mono focus:border-blue-400"
-                            placeholder="—"
-                          />
-                        </td>
-                        <td className="px-3 py-3">
-                          <input
-                            type="date"
-                            value={item.expiry_date || ''}
-                            onChange={(e) => handleFieldChange(item.id, 'expiry_date', e.target.value)}
-                            className="w-full px-2 py-1.5 border border-neutral-200 rounded-lg text-sm focus:border-blue-400"
-                          />
-                        </td>
-                        <td className="px-3 py-3">
-                          <select
-                            value={item.transportation_method || ''}
-                            onChange={(e) => handleFieldChange(item.id, 'transportation_method', e.target.value)}
-                            className="w-full px-2 py-1.5 border border-neutral-200 rounded-lg text-sm focus:border-blue-400"
-                          >
-                            <option value="">—</option>
-                            <option value="Road">Road</option>
-                            <option value="Air">Air</option>
-                            <option value="Train">Train</option>
-                            <option value="Courier">Courier</option>
-                            <option value="Self Pickup">Self Pickup</option>
-                          </select>
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-neutral-400 text-xs">₹</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={item.transportation_cost || ''}
-                              onChange={(e) => handleFieldChange(item.id, 'transportation_cost', e.target.value)}
-                              className="w-full pl-6 pr-2 py-1.5 border border-neutral-200 rounded-lg text-sm focus:border-blue-400"
-                              placeholder="0.00"
-                            />
-                          </div>
-                        </td>
-                        <td className="px-3 py-3">
-                          <input
-                            type="text"
-                            value={item.remarks || ''}
-                            onChange={(e) => handleFieldChange(item.id, 'remarks', e.target.value)}
-                            className="w-full px-2 py-1.5 border border-neutral-200 rounded-lg text-sm focus:border-blue-400"
-                            placeholder="Optional"
-                          />
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700">
-                            <AlertCircle className="w-3 h-3" /> Pending
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => saveItem(item)}
-                              disabled={isSaving}
-                              className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 disabled:opacity-50"
-                              title="Save"
-                            >
-                              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            </button>
-                            <button
-                              onClick={() => markComplete(item)}
-                              disabled={isSaving}
-                              className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 disabled:opacity-50"
-                              title="Mark Complete"
-                            >
-                              <CheckCircle2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="text-center text-neutral-500 py-8">
+              <Paperclip className="w-12 h-12 mx-auto mb-3 text-neutral-300" />
+              <p>No invoice uploaded yet.</p>
             </div>
           )}
         </div>
-
-        {/* Pagination - Only show if there are pending items */}
-        {pendingCount > 0 && totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-3 border-t border-neutral-100 bg-neutral-50">
-            <div className="text-xs text-neutral-500">Page {currentPage + 1} of {totalPages}</div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-                disabled={currentPage === 0}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-neutral-300 text-sm text-neutral-700 hover:bg-white disabled:opacity-50"
-              >
-                <ArrowLeft className="w-4 h-4" /> Previous
-              </button>
-              <button
-                onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
-                disabled={currentPage === totalPages - 1}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-neutral-300 text-sm text-neutral-700 hover:bg-white disabled:opacity-50"
-              >
-                Next <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-neutral-100 bg-white">
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-neutral-500">
-              {allDone ? (
-                <span className="inline-flex items-center gap-1 text-emerald-700">
-                  <CheckCircle2 className="w-4 h-4" /> All items completed! Closing automatically...
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-amber-700">
-                  <AlertCircle className="w-4 h-4" /> {pendingCount} item(s) pending
-                </span>
-              )}
-            </div>
-            <button onClick={onClose} className="px-4 py-2 rounded-lg bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800">
-              Close
-            </button>
-          </div>
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-neutral-100 bg-neutral-50">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800">
+            Close
+          </button>
         </div>
       </div>
     </div>
@@ -583,15 +245,31 @@ export default function DataEntryDashboard() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [openedCourier, setOpenedCourier] = useState(null);
+  const [viewingList, setViewingList] = useState(null);
+  const [viewingInvoice, setViewingInvoice] = useState(null);
   const [showOnlyPending, setShowOnlyPending] = useState(true);
   const [sortNewest, setSortNewest] = useState(true);
   const [page, setPage] = useState(1);
+
+  // All Products View States
+  const [allProducts, setAllProducts] = useState([]);
+  const [allProductsLoading, setAllProductsLoading] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [showAllProducts, setShowAllProducts] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
+  const [productFilterStatus, setProductFilterStatus] = useState("all");
+  const [productSortBy, setProductSortBy] = useState("created_at");
+  const [productSortOrder, setProductSortOrder] = useState("desc");
+  const [productPage, setProductPage] = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await axios.get(`${API}/data-entry/couriers`, { headers: authHeaders() });
-      setCouriers(res.data || []);
+      const filtered = (res.data || []).filter(c => 
+        c.ready_for_verification !== true && c.status !== 'ready_for_verification'
+      );
+      setCouriers(filtered);
     } catch (e) {
       console.error("Failed to load couriers:", e);
     } finally {
@@ -599,13 +277,29 @@ export default function DataEntryDashboard() {
     }
   }, [API, authHeaders]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const loadAllProducts = useCallback(async () => {
+    setAllProductsLoading(true);
+    try {
+      const res = await axios.get(`${API}/data-entry/products/all`, { headers: authHeaders() });
+      if (res.data?.status && res.data?.data) {
+        setAllProducts(res.data.data);
+        toast.success(`Loaded ${res.data.data.length} products`);
+      } else {
+        toast.error("Failed to load products");
+      }
+    } catch (error) {
+      console.error("Error loading products:", error);
+      toast.error(error?.response?.data?.detail || "Failed to load products");
+    } finally {
+      setAllProductsLoading(false);
+    }
+  }, [API, authHeaders]);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (showAllProducts) loadAllProducts(); }, [showAllProducts, loadAllProducts]);
 
   const applyUpdate = (updated) => {
-    // Check if courier is ready for verification (all items done)
-    if (updated.ready_for_verification) {
+    if (updated.ready_for_verification === true || updated.status === 'ready_for_verification') {
       setCouriers((arr) => arr.filter((c) => c.id !== updated.id));
       if (openedCourier?.id === updated.id) setOpenedCourier(null);
       toast.success(`Courier ${updated.courier_number} moved to verification`);
@@ -622,11 +316,10 @@ export default function DataEntryDashboard() {
     }
     const q = search.trim().toLowerCase();
     if (q) {
-      list = list.filter(
-        (c) =>
-          (c.courier_number || "").toLowerCase().includes(q) ||
-          (c.courier_company || "").toLowerCase().includes(q) ||
-          (c.products || []).some((p) => (p.name || "").toLowerCase().includes(q))
+      list = list.filter((c) =>
+        (c.courier_number || "").toLowerCase().includes(q) ||
+        (c.courier_company || "").toLowerCase().includes(q) ||
+        (c.products || []).some((p) => (p.name || "").toLowerCase().includes(q))
       );
     }
     list = [...list].sort((a, b) => {
@@ -637,13 +330,50 @@ export default function DataEntryDashboard() {
     return list;
   }, [couriers, search, showOnlyPending, sortNewest]);
 
+  const filteredProducts = useMemo(() => {
+    let list = [...allProducts];
+    const q = productSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter((p) =>
+        (p.name || "").toLowerCase().includes(q) ||
+        (p.brand || "").toLowerCase().includes(q) ||
+        (p.category || "").toLowerCase().includes(q) ||
+        (p.code || "").toLowerCase().includes(q) ||
+        (p.supplier || "").toLowerCase().includes(q) ||
+        (p.courier_number || "").toLowerCase().includes(q) ||
+        (p.invoice_number || "").toLowerCase().includes(q)
+      );
+    }
+    if (productFilterStatus === "pending") list = list.filter((p) => !p.data_entry_done);
+    else if (productFilterStatus === "entry_done") list = list.filter((p) => p.data_entry_done && !p.verification_done);
+    else if (productFilterStatus === "verified") list = list.filter((p) => p.verification_done);
+
+    list.sort((a, b) => {
+      let valA = a[productSortBy] || "";
+      let valB = b[productSortBy] || "";
+      if (productSortBy === "created_at" || productSortBy === "invoice_date" || productSortBy === "expiry_date") {
+        valA = new Date(valA).getTime() || 0;
+        valB = new Date(valB).getTime() || 0;
+      }
+      if (productSortBy === "quantity" || productSortBy === "price" || productSortBy === "total_invoice_amount") {
+        valA = Number(valA) || 0;
+        valB = Number(valB) || 0;
+      }
+      if (typeof valA === "string") { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
+      if (valA < valB) return productSortOrder === "asc" ? -1 : 1;
+      if (valA > valB) return productSortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+    return list;
+  }, [allProducts, productSearch, productFilterStatus, productSortBy, productSortOrder]);
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
-  useEffect(() => {
-    setPage(1);
-  }, [search, showOnlyPending, sortNewest]);
+  const productTotalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCT_PAGE_SIZE));
+  const productSafePage = Math.min(productPage, productTotalPages);
+  const productPageItems = filteredProducts.slice((productSafePage - 1) * PRODUCT_PAGE_SIZE, productSafePage * PRODUCT_PAGE_SIZE);
 
   const stats = useMemo(() => {
     let totalItems = 0, doneItems = 0;
@@ -653,6 +383,136 @@ export default function DataEntryDashboard() {
     });
     return { totalCouriers: couriers.length, totalItems, doneItems, pendingItems: totalItems - doneItems };
   }, [couriers]);
+
+  const productStats = useMemo(() => {
+    const total = allProducts.length;
+    const entryDone = allProducts.filter((p) => p.data_entry_done).length;
+    const verified = allProducts.filter((p) => p.verification_done).length;
+    return { total, entryDone, verified, pending: total - entryDone };
+  }, [allProducts]);
+
+  // Format helpers for table
+  const formatDate = (dateString) => {
+    if (!dateString) return "N/A";
+    try {
+      return new Date(dateString).toLocaleDateString("en-IN", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const formatCurrency = (value) => {
+    if (value === null || value === undefined) return "N/A";
+    return `₹${Number(value).toLocaleString("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
+  // Courier Row Component with View List and View Invoice buttons
+  const CourierRow = ({ courier, onOpen, onViewList, onViewInvoice, index }) => {
+    const items = courier.products || [];
+    const done = courier.data_entry_done_count || 0;
+    const total = items.length;
+    const pending = total - done;
+    const allDone = pending === 0 && total > 0;
+    
+    const hasList = !!(courier.upload_list_text || (courier.upload_list_images && courier.upload_list_images.length > 0));
+    const hasInvoice = !!courier.invoice_photo;
+    
+    const getDocumentTypeDisplay = () => {
+      const docType = courier.document_type || 'GST';
+      switch(docType) {
+        case 'GST': return { label: 'GST', color: 'bg-blue-100 text-blue-700 border-blue-200' };
+        case 'SEMI_GST': return { label: 'SEMI GST', color: 'bg-purple-100 text-purple-700 border-purple-200' };
+        case 'CHALLAN': return { label: 'CHALLAN', color: 'bg-orange-100 text-orange-700 border-orange-200' };
+        default: return { label: 'GST', color: 'bg-blue-100 text-blue-700 border-blue-200' };
+      }
+    };
+    const docType = getDocumentTypeDisplay();
+
+    return (
+      <div className="grid grid-cols-[minmax(0,1fr)_100px_380px] gap-3 items-center px-4 py-3 border-t border-neutral-100 hover:bg-neutral-50 transition-colors">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-mono text-neutral-400">#{index + 1}</span>
+            <span className="text-sm font-mono font-semibold text-neutral-900">{courier.courier_number}</span>
+            {courier.courier_company && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-neutral-500 truncate">
+                <Truck className="w-3 h-3" /> {courier.courier_company}
+              </span>
+            )}
+            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${docType.color}`}>
+              <Tag className="w-3 h-3" /> {docType.label}
+            </span>
+            {hasList && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                <List className="w-3 h-3" /> List
+              </span>
+            )}
+            {hasInvoice && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-700 border border-green-200">
+                <Receipt className="w-3 h-3" /> Invoice
+              </span>
+            )}
+          </div>
+          {courier.sent_to_data_entry_at && (
+            <div className="text-[11px] text-neutral-400 mt-0.5">
+              sent {new Date(courier.sent_to_data_entry_at).toLocaleString()}
+            </div>
+          )}
+        </div>
+        <div className="w-[100px] flex items-center justify-center">
+          <span className="text-[12px] text-neutral-700 whitespace-nowrap">
+            <span className="font-semibold">
+              {courier.num_packages}
+            </span>
+            <span className="text-neutral-400">
+              {" "}pkgs
+            </span>
+          </span>
+        </div>
+        <div className="w-[380px] flex items-center justify-end gap-2 flex-nowrap overflow-x-auto">
+          {hasList && (
+            <button
+              onClick={() => onViewList(courier)}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors whitespace-nowrap"
+              title="View uploaded list"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              View List
+            </button>
+          )}
+          
+          {hasInvoice && (
+            <button
+              onClick={() => onViewInvoice(courier)}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors whitespace-nowrap"
+              title="View uploaded invoice/challan"
+            >
+              <Receipt className="w-3.5 h-3.5" />
+              View Invoice
+            </button>
+          )}
+          
+          <button
+            onClick={() => onOpen(courier)}
+            disabled={allDone}
+            className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap min-w-[100px] ${
+              allDone ? "bg-emerald-100 text-emerald-700 cursor-not-allowed" : "bg-neutral-900 text-white hover:bg-neutral-800"
+            }`}
+          >
+            {allDone ? "Completed" : "Enter Data"}
+            {!allDone && <ChevronRight className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <DashboardShell>
@@ -664,103 +524,246 @@ export default function DataEntryDashboard() {
               <ClipboardList className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-xs uppercase tracking-wider text-neutral-400">Data Entry Staff</div>
-              <div className="text-2xl font-semibold tracking-tight text-neutral-900">Data Entry workspace</div>
-              <div className="text-sm text-neutral-500">
-                Hi {user?.full_name?.split(" ")[0] || "there"}, click "Enter data" to open table and fill details directly.
-              </div>
+              <div className="text-2xl font-semibold tracking-tight text-neutral-900">GRM</div>
+              <div className="text-sm text-neutral-500">Hi {user?.full_name?.split(" ")[0] || "there"}, click "Enter Data" to open form and fill details.</div>
             </div>
           </div>
-          <button onClick={load} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50">
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
-          </button>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatTile icon={Truck} label="Couriers pending" value={stats.totalCouriers} accent="neutral" />
-          <StatTile icon={Package} label="Total items" value={stats.totalItems} accent="blue" />
-          <StatTile icon={AlertCircle} label="Items pending" value={stats.pendingItems} accent="amber" />
-          <StatTile icon={CheckCircle2} label="Items done" value={stats.doneItems} accent="emerald" />
-        </div>
-
-        {/* Toolbar */}
-        <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-100 flex-wrap">
-            <div className="relative flex-1 min-w-[220px]">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by courier #, company, item, supplier, invoice…"
-                className="pl-9 pr-3 py-2 rounded-lg border border-neutral-200 text-sm w-full focus:outline-none focus:ring-2 focus:ring-neutral-900"
-              />
-            </div>
-            <label className="inline-flex items-center gap-1.5 text-xs text-neutral-600 cursor-pointer">
-              <input type="checkbox" checked={showOnlyPending} onChange={(e) => setShowOnlyPending(e.target.checked)} className="rounded border-neutral-300" />
-              Only with pending items
-            </label>
-            <button onClick={() => setSortNewest((v) => !v)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50">
-              {sortNewest ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-              {sortNewest ? "Newest first" : "Oldest first"}
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowAllProducts(!showAllProducts)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-medium hover:bg-purple-700">
+              <Package className="w-3.5 h-3.5" />
+              {showAllProducts ? "Show Couriers" : "View All Products"}
             </button>
-            <span className="text-[11px] text-neutral-500 ml-auto">Showing {pageItems.length} of {filtered.length}</span>
+            <button onClick={showAllProducts ? loadAllProducts : load} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50">
+              <RefreshCw className={`w-3.5 h-3.5 ${(loading || allProductsLoading) ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
           </div>
-
-          {/* Column header */}
-          <div className="grid grid-cols-[1fr_140px_180px_120px_120px] gap-3 items-center px-4 py-2 bg-neutral-50/60 border-b border-neutral-100 text-[10px] uppercase tracking-wider text-neutral-500 font-medium">
-            <div>Courier</div>
-            <div>Packages</div>
-            <div>DE progress</div>
-            <div>State</div>
-            <div className="justify-self-end">Action</div>
-          </div>
-
-          {loading ? (
-            <div className="py-16 flex items-center justify-center text-neutral-400 text-sm gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" /> Loading…
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="py-16 text-center">
-              <div className="w-12 h-12 rounded-lg bg-neutral-100 text-neutral-400 mx-auto flex items-center justify-center mb-3">
-                <ClipboardList className="w-6 h-6" />
-              </div>
-              <div className="text-sm text-neutral-700 font-medium">
-                {couriers.length === 0 ? "No couriers waiting for data entry" : "No couriers match your filters"}
-              </div>
-              <div className="text-xs text-neutral-400 mt-1">
-                {couriers.length === 0 ? "Couriers will appear here after the Owner forwards them." : "Try clearing the search."}
-              </div>
-            </div>
-          ) : (
-            <>
-              <div>
-                {pageItems.map((c, i) => (
-                  <CourierRow key={c.id} courier={c} index={(safePage - 1) * PAGE_SIZE + i} onOpen={setOpenedCourier} />
-                ))}
-              </div>
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-neutral-100 bg-neutral-50/60">
-                  <div className="text-[11px] text-neutral-500">Page {safePage} of {totalPages}</div>
-                  <div className="flex items-center gap-1.5">
-                    <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="px-2.5 py-1 rounded-md border border-neutral-200 text-xs text-neutral-700 hover:bg-white disabled:opacity-50">Prev</button>
-                    <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} className="px-2.5 py-1 rounded-md border border-neutral-200 text-xs text-neutral-700 hover:bg-white disabled:opacity-50">Next</button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
         </div>
+
+        {!showAllProducts ? (
+          <>
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <StatTile icon={Truck} label="Couriers pending" value={stats.totalCouriers} accent="neutral" />
+              <StatTile icon={Package} label="Total items" value={stats.totalItems} accent="blue" />
+              <StatTile icon={AlertCircle} label="Items pending" value={stats.pendingItems} accent="amber" />
+              <StatTile icon={CheckCircle2} label="Items done" value={stats.doneItems} accent="emerald" />
+            </div>
+
+            {/* Courier List */}
+            <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-100 flex-wrap">
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by courier #, company, item, supplier, invoice…" className="pl-9 pr-3 py-2 rounded-lg border border-neutral-200 text-sm w-full focus:outline-none focus:ring-2 focus:ring-neutral-900" />
+                </div>
+                <button onClick={() => setSortNewest((v) => !v)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50">
+                  {sortNewest ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+                  {sortNewest ? "Newest first" : "Oldest first"}
+                </button>
+                <span className="text-[11px] text-neutral-500 ml-auto">Showing {pageItems.length} of {filtered.length}</span>
+              </div>
+
+              {/* Column header */}
+              <div className="grid grid-cols-[1fr_100px_auto] gap-3 items-center px-4 py-2 bg-neutral-50 border-b border-neutral-100 text-[10px] uppercase tracking-wider text-neutral-500 font-medium">
+                <div>Courier</div>
+                <div className="text-center">Packages</div>
+                <div className="text-right">Actions</div>
+              </div>
+
+              {loading ? (
+                <div className="py-16 flex items-center justify-center text-neutral-400 text-sm gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</div>
+              ) : filtered.length === 0 ? (
+                <div className="py-16 text-center">
+                  <div className="w-12 h-12 rounded-lg bg-neutral-100 text-neutral-400 mx-auto flex items-center justify-center mb-3"><ClipboardList className="w-6 h-6" /></div>
+                  <div className="text-sm text-neutral-700 font-medium">{couriers.length === 0 ? "No couriers waiting for data entry" : "No couriers match your filters"}</div>
+                  <div className="text-xs text-neutral-400 mt-1">{couriers.length === 0 ? "Couriers will appear here after the Owner forwards them." : "Try clearing the search."}</div>
+                </div>
+              ) : (
+                <>
+                  {pageItems.map((c, i) => (
+                    <CourierRow 
+                      key={c.id} 
+                      courier={c} 
+                      index={(safePage - 1) * PAGE_SIZE + i} 
+                      onOpen={setOpenedCourier}
+                      onViewList={setViewingList}
+                      onViewInvoice={setViewingInvoice}
+                    />
+                  ))}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-neutral-100 bg-neutral-50/60">
+                      <div className="text-[11px] text-neutral-500">Page {safePage} of {totalPages}</div>
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="px-2.5 py-1 rounded-md border border-neutral-200 text-xs text-neutral-700 hover:bg-white disabled:opacity-50">Prev</button>
+                        <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} className="px-2.5 py-1 rounded-md border border-neutral-200 text-xs text-neutral-700 hover:bg-white disabled:opacity-50">Next</button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Product Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <StatTile icon={Package} label="Total Products" value={productStats.total} accent="neutral" />
+              <StatTile icon={Clock} label="Pending Entry" value={productStats.pending} accent="amber" />
+              <StatTile icon={CheckCircle2} label="Entry Done" value={productStats.entryDone} accent="blue" />
+              <StatTile icon={CheckCircle2} label="Verified" value={productStats.verified} accent="emerald" />
+            </div>
+
+            {/* All Products View - Excel-like Table */}
+            <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+              {/* Toolbar */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 px-4 py-3 border-b border-neutral-100">
+                <div className="relative flex-1 min-w-[200px] w-full">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                  <input value={productSearch} onChange={(e) => setProductSearch(e.target.value)} placeholder="Search products..." className="pl-9 pr-3 py-2 rounded-lg border border-neutral-200 text-sm w-full focus:outline-none focus:ring-2 focus:ring-purple-600" />
+                </div>
+                <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                  <select value={productFilterStatus} onChange={(e) => setProductFilterStatus(e.target.value)} className="px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-600">
+                    <option value="all">All Status</option>
+                    <option value="pending">Pending Entry</option>
+                    <option value="entry_done">Entry Done</option>
+                    <option value="verified">Verified</option>
+                  </select>
+                  <span className="text-[11px] text-neutral-500 ml-auto whitespace-nowrap">Showing {productPageItems.length} of {filteredProducts.length} products</span>
+                </div>
+              </div>
+
+              {allProductsLoading ? (
+                <div className="py-16 flex items-center justify-center text-neutral-400 text-sm gap-2"><Loader2 className="w-5 h-5 animate-spin" /> Loading products...</div>
+              ) : filteredProducts.length === 0 ? (
+                <div className="py-16 text-center">
+                  <div className="w-12 h-12 rounded-lg bg-neutral-100 text-neutral-400 mx-auto flex items-center justify-center mb-3"><Package className="w-6 h-6" /></div>
+                  <div className="text-sm text-neutral-700 font-medium">{allProducts.length === 0 ? "No products found" : "No products match your filters"}</div>
+                </div>
+              ) : (
+                <>
+                  {/* Excel-like Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-neutral-100 border-b border-neutral-200">
+                          <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-neutral-600 uppercase tracking-wider whitespace-nowrap">#</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-neutral-600 uppercase tracking-wider whitespace-nowrap">Product Name</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-neutral-600 uppercase tracking-wider whitespace-nowrap">Brand</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-neutral-600 uppercase tracking-wider whitespace-nowrap">Category</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-neutral-600 uppercase tracking-wider whitespace-nowrap">Code</th>
+                          <th className="px-3 py-2.5 text-right text-[10px] font-semibold text-neutral-600 uppercase tracking-wider whitespace-nowrap">Qty</th>
+                          <th className="px-3 py-2.5 text-right text-[10px] font-semibold text-neutral-600 uppercase tracking-wider whitespace-nowrap">Price/Unit</th>
+                          <th className="px-3 py-2.5 text-right text-[10px] font-semibold text-neutral-600 uppercase tracking-wider whitespace-nowrap">Total Amount</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-neutral-600 uppercase tracking-wider whitespace-nowrap">Supplier</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-neutral-600 uppercase tracking-wider whitespace-nowrap">Invoice No</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-neutral-600 uppercase tracking-wider whitespace-nowrap">Invoice Date</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-neutral-600 uppercase tracking-wider whitespace-nowrap">Courier</th>
+                          <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-neutral-600 uppercase tracking-wider whitespace-nowrap">Status</th>
+                          <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-neutral-600 uppercase tracking-wider whitespace-nowrap">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {productPageItems.map((product, index) => (
+                          <tr key={product.id || index} className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
+                            <td className="px-3 py-2.5 text-[10px] text-neutral-400 font-mono">
+                              {(productSafePage - 1) * PRODUCT_PAGE_SIZE + index + 1}
+                            </td>
+                            <td className="px-3 py-2.5 text-sm font-medium text-neutral-900 max-w-[150px] truncate">
+                              <div className="flex items-center gap-2">
+                                {product.photo ? (
+                                  <img src={product.photo} alt={product.name} className="w-6 h-6 rounded object-cover" />
+                                ) : (
+                                  <Package className="w-4 h-4 text-neutral-300" />
+                                )}
+                                <span>{product.name || "N/A"}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-sm text-neutral-700">{product.brand || "N/A"}</td>
+                            <td className="px-3 py-2.5 text-sm text-neutral-700">
+                              {product.category && (
+                                <span className="px-2 py-0.5 rounded-full bg-neutral-100 text-xs">
+                                  {product.category}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 text-sm font-mono text-neutral-600">{product.code || "N/A"}</td>
+                            <td className="px-3 py-2.5 text-sm font-semibold text-neutral-900 text-right">{product.quantity || 0}</td>
+                            <td className="px-3 py-2.5 text-sm text-emerald-600 font-medium text-right">{formatCurrency(product.price)}</td>
+                            <td className="px-3 py-2.5 text-sm font-semibold text-purple-600 text-right">{formatCurrency(product.total_invoice_amount)}</td>
+                            <td className="px-3 py-2.5 text-sm text-neutral-700 max-w-[120px] truncate">{product.supplier || "N/A"}</td>
+                            <td className="px-3 py-2.5 text-sm font-mono text-neutral-600">{product.invoice_number || "N/A"}</td>
+                            <td className="px-3 py-2.5 text-sm text-neutral-700">{formatDate(product.invoice_date)}</td>
+                            <td className="px-3 py-2.5 text-sm text-neutral-700">
+                              <span className="font-mono text-xs">{product.courier_number || "N/A"}</span>
+                            </td>
+                            <td className="px-3 py-2.5 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                {product.data_entry_done && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                                    <CheckCircle2 className="w-3 h-3" /> Entry
+                                  </span>
+                                )}
+                                {product.verification_done && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <CheckCircle2 className="w-3 h-3" /> Verified
+                                  </span>
+                                )}
+                                {!product.data_entry_done && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                    <Clock className="w-3 h-3" /> Pending
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-center">
+                              <button
+                                onClick={() => setSelectedProduct(product)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 text-white text-[10px] font-medium hover:bg-blue-700 transition-colors whitespace-nowrap"
+                              >
+                                <Eye className="w-3 h-3" />
+                                View
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  {productTotalPages > 1 && (
+                    <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-neutral-100 bg-neutral-50/60">
+                      <div className="text-[11px] text-neutral-500">Page {productSafePage} of {productTotalPages}</div>
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => setProductPage((p) => Math.max(1, p - 1))} disabled={productSafePage === 1} className="px-3 py-1.5 rounded-md border border-neutral-200 text-xs text-neutral-700 hover:bg-white disabled:opacity-50">
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => setProductPage((p) => Math.min(productTotalPages, p + 1))} disabled={productSafePage === productTotalPages} className="px-3 py-1.5 rounded-md border border-neutral-200 text-xs text-neutral-700 hover:bg-white disabled:opacity-50">
+                          <ChevronRightIcon className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Data Entry Table Modal */}
-      {openedCourier && (
-        <DataEntryTableModal
-          courier={openedCourier}
-          onClose={() => setOpenedCourier(null)}
-          onUpdated={applyUpdate}
-        />
+      {/* Modals */}
+      {viewingList && (
+        <ListViewerModal courier={viewingList} onClose={() => setViewingList(null)} />
       )}
+      
+      {viewingInvoice && (
+        <InvoiceViewerModal courier={viewingInvoice} onClose={() => setViewingInvoice(null)} />
+      )}
+      
+      {openedCourier && <DataEntryTableModal courier={openedCourier} onClose={() => setOpenedCourier(null)} onUpdated={applyUpdate} />}
+      
+      {selectedProduct && <ProductDetailsModal product={selectedProduct} onClose={() => setSelectedProduct(null)} />}
     </DashboardShell>
   );
 }

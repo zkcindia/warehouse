@@ -99,6 +99,15 @@ def courier_doc_to_out(doc: dict) -> dict:
         'attachments': doc.get('attachments') or [],
         'created_at': created_at,
         'created_by_name': doc.get('created_by_name', 'Cashier'),
+
+
+             # ========== ADD THESE MISSING DOCUMENT FIELDS ==========
+        'upload_list_text': doc.get('upload_list_text'),
+        'upload_list_photo': doc.get('upload_list_photo'),
+        'upload_list_type': doc.get('upload_list_type'),
+        'upload_list_name': doc.get('upload_list_name'),
+        'invoice_photo': doc.get('invoice_photo'),
+        'invoice_name': doc.get('invoice_name'),
     }
 
 def _apply_item_into_products(products: list, body: CourierItemAdd, now_iso: str) -> list:
@@ -575,24 +584,37 @@ async def delete_courier(cid: str, user: dict = Depends(require_role(ROLE_OWNER,
 # =========================
 # Update Courier (for Cashier editing rejected couriers)
 # =========================
+# =========================
+# Update Courier (for Cashier editing rejected couriers & Owner uploading documents)
+# =========================
 @api_router.patch("/couriers/{cid}", response_model=CourierOut)
 async def update_courier(
     cid: str, 
     body: dict,
     user: dict = Depends(require_role(ROLE_OWNER, ROLE_CASHIER, ROLE_WAREHOUSE))
 ):
-    """Update courier fields - used by Cashier when editing rejected couriers"""
+    """Update courier fields - used by Cashier when editing rejected couriers and Owner uploading documents"""
     doc = await db.couriers.find_one({'id': cid}, {'_id': 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Courier entry not found.")
     
     update_fields = {}
     
+    # Updated allowed fields - ADDED document upload fields
     allowed_fields = [
         'courier_company', 'num_packages', 'handled_by', 
         'payment_made', 'payment_mode', 'charges', 'vehicle',
         'transport_charge', 'transport_vehicle', 'transport_payment_mode',
-        'slip_photo', 'package_photo'
+        'slip_photo', 'package_photo',
+        # ===== ADD THESE DOCUMENT UPLOAD FIELDS =====
+        'upload_list_text',
+        'upload_list_photo',
+        'upload_list_type',
+        'upload_list_name',
+        'upload_list_mime',
+        'invoice_photo',
+        'invoice_name',
+        'invoice_mime'
     ]
     
     for field in allowed_fields:
@@ -615,11 +637,13 @@ async def update_courier(
         update_fields['updated_at'] = datetime.now(timezone.utc).isoformat()
         update_fields['updated_by'] = user['full_name']
         await db.couriers.update_one({'id': cid}, {'$set': update_fields})
+        print(f"DEBUG: Updated fields for courier {cid}: {list(update_fields.keys())}")
+        print(f"DEBUG: upload_list_text set to: {update_fields.get('upload_list_text')}")
+        print(f"DEBUG: upload_list_photo set to: {'Present' if update_fields.get('upload_list_photo') else 'Not set'}")
+        print(f"DEBUG: invoice_photo set to: {'Present' if update_fields.get('invoice_photo') else 'Not set'}")
     
     updated = await db.couriers.find_one({'id': cid}, {'_id': 0})
     return courier_doc_to_out(updated)
-
-# =========================
 # Warehouse Checklist & Accept/Reject
 # =========================
 @api_router.patch("/couriers/{cid}/accept", response_model=CourierOut)

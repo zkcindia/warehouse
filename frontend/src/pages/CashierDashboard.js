@@ -21,14 +21,14 @@ import {
   Trash2,
   Save,
   ListChecks,
-  RotateCcw,
+
   AlertTriangle,
   CheckCircle2,
   FileText,
   FileSpreadsheet,
   File as FileIcon,
   Paperclip,
-  Download,
+
   UserX,
   Crown,
 } from "lucide-react";
@@ -131,6 +131,7 @@ const blankEntry = () => ({
   transport_charge: "",
   transport_vehicle: "",
   transport_payment_mode: "none",
+    multiple_images: [],
 });
 
 export default function CashierDashboard() {
@@ -301,12 +302,16 @@ export default function CashierDashboard() {
     }));
   };
 
-  const resetCard = () => {
-    setEntry(blankEntry());
-    setEditingUid(null);
-    if (fileRef.current) fileRef.current.value = "";
-    if (docRef.current) docRef.current.value = "";
-  };
+const resetCard = () => {
+  setEntry(blankEntry());
+  setEditingUid(null);
+  if (fileRef.current) fileRef.current.value = "";
+  if (docRef.current) docRef.current.value = "";
+  if (packagePhotoRef.current) packagePhotoRef.current.value = "";
+  // Reset the multiple image input too
+  const multiInput = document.getElementById('multiImageUpload');
+  if (multiInput) multiInput.value = "";
+};
 
   const validate = (e) => {
     if (!e.num_packages || Number(e.num_packages) < 1)
@@ -393,6 +398,53 @@ export default function CashierDashboard() {
       setSubmitting(false);
     }
   };
+
+  // Add this function for handling multiple images
+const handleMultipleImages = async (e) => {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  
+  const validImages = [];
+  for (const file of files) {
+    if (!file.type.startsWith("image/")) {
+      toast.error(`${file.name}: not an image file.`);
+      continue;
+    }
+    if (file.size > MAX_IMG_BYTES) {
+      toast.error(`${file.name}: image must be under 4MB.`);
+      continue;
+    }
+    try {
+      const dataUrl = await fileToDataURL(file);
+      validImages.push({
+        name: file.name,
+        data: dataUrl,
+        size: file.size,
+      });
+    } catch {
+      toast.error(`${file.name}: failed to read image.`);
+    }
+  }
+  
+  if (validImages.length) {
+    setEntry((e) => ({
+      ...e,
+      multiple_images: [...(e.multiple_images || []), ...validImages],
+    }));
+    toast.success(`${validImages.length} image${validImages.length === 1 ? '' : 's'} uploaded`);
+  }
+  
+  // Reset the input
+  e.target.value = '';
+};
+
+// Add this function to remove a multiple image
+const removeMultipleImage = (index) => {
+  setEntry((e) => ({
+    ...e,
+    multiple_images: (e.multiple_images || []).filter((_, i) => i !== index),
+  }));
+};
 
   return (
     <DashboardShell>
@@ -725,223 +777,248 @@ export default function CashierDashboard() {
 
             <div className="relative px-5 py-5 space-y-5">
               {/* Section 1 - Courier Info */}
-{/* Row 1: Package Photo | No. of Packages | + Upload */}
-<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <input
+                ref={packagePhotoRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handlePackagePhoto}
+                className="hidden"
+              />
 
-  {/* Package Photo Preview + Clickable */}
-  <div className="space-y-1.5">
-    <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
-      <Package className="w-3.5 h-3.5 text-neutral-400" />
-      Package Photo
-    </label>
+              <input
+                id="multiImageUpload"
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleMultipleImages}
+                className="hidden"
+              />
 
-    <div
-      onClick={() => packagePhotoRef.current?.click()}
-      className="h-[48px] px-3 rounded-xl border border-neutral-200 bg-neutral-50 flex items-center gap-2 cursor-pointer hover:border-orange-300 hover:bg-orange-50/30 transition-all duration-200"
-    >
-      {entry.package_photo ? (
-        <>
-          <img
-            src={entry.package_photo}
-            alt="package"
-            className="w-8 h-8 rounded-lg object-cover shadow-sm"
-          />
-          <span className="text-xs text-neutral-500">
-            Photo Added
-          </span>
-        </>
-      ) : (
-        <>
-          <Package className="w-4 h-4 text-neutral-400" />
-          <span className="text-xs text-neutral-400">
-            Tap to Upload
-          </span>
-        </>
-      )}
-    </div>
-  </div>
+              {/* Row 1: Package Photo | No. of Packages */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5 text-neutral-400" />
+                    Package Photo
+                  </label>
 
-  {/* No Of Packages */}
-  <div className="space-y-1.5">
-    <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
-      <Package className="w-3.5 h-3.5 text-neutral-400" />
-      No. of Packages
-    </label>
+                  <div
+                    onClick={() => packagePhotoRef.current?.click()}
+                    className="h-[48px] px-3 rounded-xl border border-neutral-200 bg-neutral-50 flex items-center gap-2 cursor-pointer hover:border-orange-300 hover:bg-orange-50/30 transition-all duration-200"
+                  >
+                    {entry.package_photo ? (
+                      <>
+                        <img
+                          src={entry.package_photo}
+                          alt="package"
+                          className="w-8 h-8 rounded-lg object-cover shadow-sm"
+                        />
+                        <span className="text-xs text-neutral-500">Photo Added</span>
+                      </>
+                    ) : (
+                      <>
+                        <Package className="w-4 h-4 text-neutral-400" />
+                        <span className="text-xs text-neutral-400">Tap to Upload</span>
+                      </>
+                    )}
+                  </div>
+                </div>
 
-    <input
-      type="number"
-      value={entry.num_packages}
-      onChange={(e) =>
-        update({ num_packages: e.target.value })
-      }
-      placeholder="0"
-      className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-purple-100 focus:border-purple-400 transition-all duration-200"
-    />
-  </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5 text-neutral-400" />
+                    No. of Packages
+                  </label>
 
-  {/* Upload Button */}
-  <div className="space-y-1.5">
-    <label className="text-xs font-medium text-neutral-600">
-      Upload Image
-    </label>
+                  <input
+                    type="number"
+                    value={entry.num_packages}
+                    onChange={(e) => update({ num_packages: e.target.value })}
+                    placeholder="0"
+                    className="h-[48px] w-full px-3 rounded-xl border border-neutral-200 bg-neutral-50 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-purple-100 focus:border-purple-400 transition-all duration-200"
+                  />
+                </div>
+              </div>
 
-    <div
-      onClick={() => packagePhotoRef.current?.click()}
-      className="group h-[48px] rounded-xl border-2 border-dashed border-neutral-200 bg-neutral-50/50 flex items-center justify-center cursor-pointer hover:border-orange-300 hover:bg-orange-50/30 transition-all duration-200"
-    >
-      <Plus className="w-5 h-5 text-neutral-400 group-hover:text-orange-600" />
-    </div>
-  </div>
+              {/* Row 2: Transporter | Slip Photo | Transport Amount | Payment Mode */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-neutral-600">
+                    Transporter
+                  </label>
+                  <input
+                    value={entry.transport_vehicle}
+                    onChange={(e) => update({ transport_vehicle: e.target.value })}
+                    placeholder="Transporter"
+                    className="h-[48px] w-full px-3 rounded-xl border border-neutral-200 bg-neutral-50 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all duration-200"
+                  />
+                </div>
 
-  {/* ONE Hidden Input Only */}
-  <input
-    ref={packagePhotoRef}
-    type="file"
-    accept="image/*"
-    capture="environment"
-    onChange={handlePackagePhoto}
-    className="hidden"
-  />
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-neutral-400" />
+                    Slip Photo
+                  </label>
+                  <div
+                    onClick={() => fileRef.current?.click()}
+                    className="h-[48px] px-3 rounded-xl border-2 border-dashed border-neutral-200 bg-neutral-50/50 flex items-center gap-2 cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all duration-200"
+                  >
+                    {entry.photo ? (
+                      <img
+                        src={entry.photo}
+                        alt="slip"
+                        className="w-8 h-8 rounded-lg object-cover shadow-sm"
+                      />
+                    ) : (
+                      <Upload className="w-4 h-4 text-neutral-400" />
+                    )}
+                    <span className="text-xs text-neutral-400">
+                      {entry.photo ? "Photo Added" : "Upload"}
+                    </span>
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhoto}
+                      className="hidden"
+                    />
+                  </div>
+                </div>
 
-</div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-neutral-600">
+                    Transport Amount
+                  </label>
+                  <input
+                    type="number"
+                    value={entry.transport_charge}
+                    onChange={(e) => update({ transport_charge: e.target.value })}
+                    placeholder="₹ 0"
+                    className="h-[48px] w-full px-3 rounded-xl border border-neutral-200 bg-neutral-50 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all duration-200"
+                  />
+                </div>
 
-{/* Row 2: Transporter | Slip Photo | Transport Amount | Payment Mode */}
-<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-  <div className="space-y-1.5">
-    <label className="text-xs font-medium text-neutral-600">
-      Transporter
-    </label>
-    <input
-      value={entry.transport_vehicle}
-      onChange={(e) => update({ transport_vehicle: e.target.value })}
-      placeholder="Transporter"
-      className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all duration-200"
-    />
-  </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-neutral-600">
+                    Payment Mode
+                  </label>
+                  <select
+                    value={entry.transport_payment_mode}
+                    onChange={(e) => update({ transport_payment_mode: e.target.value })}
+                    className="h-[48px] w-full px-3 rounded-xl border border-neutral-200 bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all duration-200 cursor-pointer"
+                  >
+                    <option value="upi">UPI</option>
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                    <option value="none">Unpaid</option>
+                  </select>
+                </div>
+              </div>
 
-  <div className="space-y-1.5">
-    <label className="text-xs font-medium text-neutral-600 flex items-center gap-1.5">
-      <ImageIcon className="w-3.5 h-3.5 text-neutral-400" />
-      Slip Photo
-    </label>
-    <div
-      onClick={() => fileRef.current?.click()}
-      className="group h-[48px] px-3 rounded-xl border-2 border-dashed border-neutral-200 bg-neutral-50/50 flex items-center gap-2 cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all duration-200"
-    >
-      {entry.photo ? (
-        <img
-          src={entry.photo}
-          alt="slip"
-          className="w-8 h-8 rounded-lg object-cover shadow-sm"
-        />
-      ) : (
-        <Upload className="w-4 h-4 text-neutral-400 group-hover:text-purple-600" />
-      )}
-      <span className="text-xs text-neutral-400 group-hover:text-purple-600">
-        {entry.photo ? "Photo Added" : "Upload"}
-      </span>
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        onChange={handlePhoto}
-        className="hidden"
-      />
-    </div>
-  </div>
+              {/* Row 3: Delivery Charges | Delivery Type | Payment Mode */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-neutral-600">
+                    Delivery Charges
+                  </label>
+                  <input
+                    type="number"
+                    value={entry.courier_charge}
+                    onChange={(e) => update({ courier_charge: e.target.value })}
+                    placeholder="₹ 0"
+                    className="h-[48px] w-full px-3 rounded-xl border border-neutral-200 bg-neutral-50 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all duration-200"
+                  />
+                </div>
 
-  <div className="space-y-1.5">
-    <label className="text-xs font-medium text-neutral-600">
-      Transport Amount
-    </label>
-    <input
-      type="number"
-      value={entry.transport_charge}
-      onChange={(e) => update({ transport_charge: e.target.value })}
-      placeholder="₹ 0"
-      className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all duration-200"
-    />
-  </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-neutral-600">
+                    Delivery Type
+                  </label>
+                  <select
+                    value={entry.vehicle}
+                    onChange={(e) => update({ vehicle: e.target.value })}
+                    className="h-[48px] w-full px-3 rounded-xl border border-neutral-200 bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all duration-200 cursor-pointer"
+                  >
+                    <option value="">Select</option>
+                    <option value="bike">Bike</option>
+                    <option value="car">Car</option>
+                    <option value="auto">Auto</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
 
-  <div className="space-y-1.5">
-    <label className="text-xs font-medium text-neutral-600">
-      Payment Mode
-    </label>
-    <select
-      value={entry.transport_payment_mode}
-      onChange={(e) => update({ transport_payment_mode: e.target.value })}
-      className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all duration-200 cursor-pointer"
-    >
-      <option value="upi">UPI</option>
-      <option value="cash">Cash</option>
-      <option value="card">Card</option>
-      <option value="none">Unpaid</option>
-    </select>
-  </div>
-</div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-neutral-600">
+                    Payment Mode
+                  </label>
+                  <select
+                    value={entry.payment_mode}
+                    onChange={(e) => update({ payment_mode: e.target.value })}
+                    className="h-[48px] w-full px-3 rounded-xl border border-neutral-200 bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all duration-200 cursor-pointer"
+                  >
+                    <option value="upi">UPI</option>
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                    <option value="none">Unpaid</option>
+                  </select>
+                </div>
+              </div>
 
-{/* Row 3: Delivery Charges | Delivery Type | Payment Mode */}
-<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-  <div className="space-y-1.5">
-    <label className="text-xs font-medium text-neutral-600">
-      Delivery Charges
-    </label>
-    <input
-      type="number"
-      value={entry.courier_charge}
-      onChange={(e) => update({ courier_charge: e.target.value })}
-      placeholder="₹ 0"
-      className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all duration-200"
-    />
-  </div>
+              {/* Upload Images - Handled By ke upar */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-neutral-600">
+                  Upload Images
+                </label>
 
-  <div className="space-y-1.5">
-    <label className="text-xs font-medium text-neutral-600">
-      Delivery Type
-    </label>
-    <select
-      value={entry.vehicle}
-      onChange={(e) => update({ vehicle: e.target.value })}
-      className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all duration-200 cursor-pointer"
-    >
-      <option value="">Select</option>
-      <option value="bike">Bike</option>
-      <option value="car">Car</option>
-      <option value="auto">Auto</option>
-      <option value="other">Other</option>
-    </select>
-  </div>
+                <div
+                  onClick={() => document.getElementById("multiImageUpload")?.click()}
+                  className="h-[48px] rounded-xl border-2 border-dashed border-neutral-200 bg-neutral-50/50 flex items-center justify-center gap-2 cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all duration-200"
+                >
+                  <Upload className="w-4 h-4 text-neutral-400" />
+                  <span className="text-xs text-neutral-400">
+                    Upload Images
+                  </span>
+                </div>
 
-  <div className="space-y-1.5">
-    <label className="text-xs font-medium text-neutral-600">
-      Payment Mode
-    </label>
-    <select
-      value={entry.payment_mode}
-      onChange={(e) => update({ payment_mode: e.target.value })}
-      className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all duration-200 cursor-pointer"
-    >
-      <option value="upi">UPI</option>
-      <option value="cash">Cash</option>
-      <option value="card">Card</option>
-      <option value="none">Unpaid</option>
-    </select>
-  </div>
-</div>
+                {entry.multiple_images && entry.multiple_images.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {entry.multiple_images.map((img, idx) => (
+                      <div key={idx} className="relative group/image">
+                        <img
+                          src={img.data}
+                          alt={`upload-${idx}`}
+                          className="w-10 h-10 rounded-lg object-cover border border-neutral-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeMultipleImage(idx)}
+                          className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] opacity-0 group-hover/image:opacity-100 transition-opacity"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <span className="text-[10px] text-neutral-400 self-center">
+                      {entry.multiple_images.length} image{entry.multiple_images.length > 1 ? "s" : ""}
+                    </span>
+                  </div>
+                )}
+              </div>
 
-{/* Handled By */}
-<div className="space-y-1.5">
-  <label className="text-xs font-medium text-neutral-600">
-    Handled By
-  </label>
-  <input
-    data-testid="courier-handled-by"
-    value={entry.handled_by}
-    onChange={(e) => update({ handled_by: e.target.value })}
-    placeholder="Handled By"
-    className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400 transition-all duration-200"
-  />
-</div>
+              {/* Handled By */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-neutral-600">
+                  Handled By
+                </label>
+                <input
+                  data-testid="courier-handled-by"
+                  value={entry.handled_by}
+                  onChange={(e) => update({ handled_by: e.target.value })}
+                  placeholder="Handled By"
+                  className="h-[48px] w-full px-3 rounded-xl border border-neutral-200 bg-neutral-50 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400 transition-all duration-200"
+                />
+              </div>
 
               {/* Submit Button */}
               <button

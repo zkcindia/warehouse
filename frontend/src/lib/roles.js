@@ -1,6 +1,18 @@
 import { Crown, IndianRupee, Warehouse, ClipboardEdit, ShieldCheck } from "lucide-react";
 
 export const ROLES = [
+
+    {
+    key: "purchase",
+    slug: "purchase",
+    label: "Purchase",
+    description: "Full control. Oversee operations and inventory.",
+    icon: Crown,
+    accent: "bg-neutral-900 text-white",
+    demoEmail: "Purchase@warehouse.com",
+    demoPassword: "Purchase@123",
+  },
+  
   {
     key: "owner",
     slug: "owner",
@@ -34,7 +46,7 @@ export const ROLES = [
   {
     key: "data_entry",
     slug: "data-entry",
-    label: "Data Entry Staff",
+    label: "GRN Staff",
     description: "Record incoming product information into the system.",
     icon: ClipboardEdit,
     accent: "bg-emerald-600 text-white",
