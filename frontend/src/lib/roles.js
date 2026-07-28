@@ -2,16 +2,16 @@ import { Crown, IndianRupee, Warehouse, ClipboardEdit, ShieldCheck } from "lucid
 
 export const ROLES = [
 
-    {
-    key: "purchase",
-    slug: "purchase",
-    label: "Purchase",
-    description: "Full control. Oversee operations and inventory.",
-    icon: Crown,
-    accent: "bg-neutral-900 text-white",
-    demoEmail: "Purchase@warehouse.com",
-    demoPassword: "Purchase@123",
-  },
+  //   {
+  //   key: "purchase",
+  //   slug: "purchase",
+  //   label: "Purchase",
+  //   description: "Full control. Oversee operations and inventory.",
+  //   icon: Crown,
+  //   accent: "bg-neutral-900 text-white",
+  //   demoEmail: "Purchase@warehouse.com",
+  //   demoPassword: "Purchase@123",
+  // },
   
   {
     key: "owner",
