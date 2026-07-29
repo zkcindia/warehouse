@@ -74,6 +74,8 @@ const useFileUpload = () => {
 };
 
 const useBillManagement = () => {
+
+  
   const [billRows, setBillRows] = useState([
     {
       id: Date.now(),
@@ -607,10 +609,15 @@ export default function OwnerDashboard() {
 
   const courierActions = useCourierActions(API, authHeaders, refreshAnalytics);
 
-useEffect(() => {
-  load();
+    // FIX: Use a ref to prevent infinite loops
+  const hasLoaded = useRef(false);
 
-}, []); // Pehle: [load]
+  useEffect(() => {
+    if (!hasLoaded.current) {
+      hasLoaded.current = true;
+      load();
+    }
+  }, []); // Empty dependency array - runs only once on mount
 
   // Fetch couriers for mapping
   const fetchCouriersForMapping = async (groupId) => {
