@@ -141,6 +141,8 @@ function ProtectedRoute({ children, allowedRoles }) {
   return children;
 }
 
+
+
 function RootRedirect() {
   const { user, loading } = useAuth();
   if (loading) {
