@@ -13,6 +13,11 @@ import {
   UserX,
 } from "lucide-react";
 
+export default function DataEntryTableModal({ courier, onClose, onUpdated }) {
+  const { API, authHeaders } = useAuth();
+
+  const [isRegistered, setIsRegistered] = useState(true);
+
   const emptyProduct = {
     supply_code: "",
     supplier: "",
@@ -63,16 +68,7 @@ new_amount: "",
 landing_cost: "",
   };
 
-export default function DataEntryTableModal({ courier, onClose, onUpdated }) {
-  const { API, authHeaders } = useAuth();
-
-  const [isRegistered, setIsRegistered] = useState(true);
-
-
-
-const [currentProduct, setCurrentProduct] = useState({
-  ...emptyProduct,
-});
+  const [currentProduct, setCurrentProduct] = useState(emptyProduct);
   const [saving, setSaving] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [allProducts, setAllProducts] = useState([]);
@@ -97,36 +93,36 @@ const [currentProduct, setCurrentProduct] = useState({
     loadProducts();
   }, [API, authHeaders]);
 
-useEffect(() => {
-  if (!courier) return;
+  useEffect(() => {
+    if (!courier) return;
 
-  const warehouseProduct =
-    courier.products?.find((p) => !p.data_entry_done) ||
-    courier.products?.[0];
+    const warehouseProduct =
+      courier.products?.find((p) => !p.data_entry_done) ||
+      courier.products?.[0];
 
-  if (!warehouseProduct) {
-    setCurrentProduct(emptyProduct);
-    return;
-  }
+    if (!warehouseProduct) {
+      setCurrentProduct(emptyProduct);
+      return;
+    }
 
-  setCurrentProduct((prev) => ({
-    ...emptyProduct,
+    setCurrentProduct((prev) => ({
+      ...emptyProduct,
 
-    name: warehouseProduct.name || "",
-    quantity: warehouseProduct.quantity || "",
-    photo: warehouseProduct.photo || "",
-    photo_preview: warehouseProduct.photo || "",
-    category: warehouseProduct.category || "",
-    brand: warehouseProduct.brand || "",
-    code: warehouseProduct.code || "",
-    description: warehouseProduct.description || "",
-    damaged: !!warehouseProduct.damaged,
-    damaged_count: warehouseProduct.damaged_count || 0,
+      name: warehouseProduct.name || "",
+      quantity: warehouseProduct.quantity || "",
+      photo: warehouseProduct.photo || "",
+      photo_preview: warehouseProduct.photo || "",
+      category: warehouseProduct.category || "",
+      brand: warehouseProduct.brand || "",
+      code: warehouseProduct.code || "",
+      description: warehouseProduct.description || "",
+      damaged: !!warehouseProduct.damaged,
+      damaged_count: warehouseProduct.damaged_count || 0,
 
-    supply_code: warehouseProduct.supply_code || prev.supply_code || "",
-    register_type: isRegistered ? "register" : "unregister",
-  }));
-}, [courier, isRegistered]);
+      supply_code: warehouseProduct.supply_code || prev.supply_code || "",
+      register_type: isRegistered ? "register" : "unregister",
+    }));
+}, [courier, isRegistered]); 
 
   if (!courier) return null;
 
@@ -304,9 +300,7 @@ useEffect(() => {
 
       toast.success("Data entry completed! Courier moved to verification");
 
-setCurrentProduct({
-  ...emptyProduct,
-});
+      setCurrentProduct(emptyProduct);
 
       if (completeRes.data) {
         onUpdated?.(completeRes.data);

@@ -607,9 +607,10 @@ export default function OwnerDashboard() {
 
   const courierActions = useCourierActions(API, authHeaders, refreshAnalytics);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+useEffect(() => {
+  load();
+
+}, []); // Pehle: [load]
 
   // Fetch couriers for mapping
   const fetchCouriersForMapping = async (groupId) => {
