@@ -74,8 +74,6 @@ const useFileUpload = () => {
 };
 
 const useBillManagement = () => {
-
-  
   const [billRows, setBillRows] = useState([
     {
       id: Date.now(),
@@ -609,14 +607,16 @@ export default function OwnerDashboard() {
 
   const courierActions = useCourierActions(API, authHeaders, refreshAnalytics);
 
-    // FIX: Use a ref to prevent infinite loops
+  // FIX: Use a ref to prevent infinite loops
   const hasLoaded = useRef(false);
 
+  // FIX: Add eslint-disable comment for the useEffect
   useEffect(() => {
     if (!hasLoaded.current) {
       hasLoaded.current = true;
       load();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - runs only once on mount
 
   // Fetch couriers for mapping
