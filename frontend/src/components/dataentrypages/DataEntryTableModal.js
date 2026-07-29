@@ -93,43 +93,44 @@ landing_cost: "",
     loadProducts();
   }, [API, authHeaders]);
 
-  useEffect(() => {
-    if (!courier) return;
+useEffect(() => {
+  if (!courier) return;
 
-    const warehouseProduct =
-      courier.products?.find((p) => !p.data_entry_done) ||
-      courier.products?.[0];
+  const warehouseProduct =
+    courier.products?.find((p) => !p.data_entry_done) ||
+    courier.products?.[0];
 
-    if (!warehouseProduct) {
-      setCurrentProduct(emptyProduct);
-      return;
-    }
+  if (!warehouseProduct) {
+    setCurrentProduct(emptyProduct);
+    return;
+  }
 
-    setCurrentProduct((prev) => ({
-      ...emptyProduct,
+  setCurrentProduct((prev) => ({
+    ...emptyProduct,
 
-      name: warehouseProduct.name || "",
-      quantity: warehouseProduct.quantity || "",
-      photo: warehouseProduct.photo || "",
-      photo_preview: warehouseProduct.photo || "",
-      category: warehouseProduct.category || "",
-      brand: warehouseProduct.brand || "",
-      code: warehouseProduct.code || "",
-      description: warehouseProduct.description || "",
-      damaged: !!warehouseProduct.damaged,
-      damaged_count: warehouseProduct.damaged_count || 0,
+    name: warehouseProduct.name || "",
+    quantity: warehouseProduct.quantity || "",
+    photo: warehouseProduct.photo || "",
+    photo_preview: warehouseProduct.photo || "",
+    category: warehouseProduct.category || "",
+    brand: warehouseProduct.brand || "",
+    code: warehouseProduct.code || "",
+    description: warehouseProduct.description || "",
+    damaged: !!warehouseProduct.damaged,
+    damaged_count: warehouseProduct.damaged_count || 0,
 
-      supply_code: warehouseProduct.supply_code || prev.supply_code || "",
-      register_type: isRegistered ? "register" : "unregister",
-    }));
-}, [courier, isRegistered]); 
+    supply_code: warehouseProduct.supply_code || prev.supply_code || "",
+    register_type: isRegistered ? "register" : "unregister",
+  }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [courier, isRegistered]); // <-- YAHAN SIRF courier, isRegistered
 
   if (!courier) return null;
 
 
 
 
-  
+
 
   const item = currentProduct;
 
